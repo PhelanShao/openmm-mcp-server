@@ -6,6 +6,23 @@ from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+CONTROL_SIMULATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "task_id": {"type": "string", "description": "ID of the task to control."},
+        "action": {
+            "type": "string",
+            "enum": ["start", "pause", "resume", "stop", "delete"],
+            "description": "The control action to perform on the task."
+        }
+        # "parameters": { # Optional field for future extensions, not currently used
+        #     "type": "object",
+        #     "description": "Optional parameters for the control action."
+        # }
+    },
+    "required": ["task_id", "action"]
+}
+
 async def run_control_simulation(task_manager: TaskManager, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """
     Controls the execution of a simulation task (start, pause, resume, stop).

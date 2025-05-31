@@ -1,55 +1,18 @@
 # src/abacus_engine.py
-# Contains the abstract ComputeEngine and a placeholder for AbacusEngine
+# Contains the AbacusEngine for preparing, running, and parsing Abacus DFT calculations.
 
-from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+import asyncio
+import os
+import json
+from typing import Dict, Any, Optional, List
 
-class ComputeEngine(ABC):
-    """Abstract base class for a generic computation engine."""
-
-    @abstractmethod
-    async def setup_calculation(self, config: Dict[str, Any]) -> Any:
-        """
-        Sets up the calculation based on the provided configuration.
-        Returns any necessary state or system object for running the calculation.
-        """
-        pass
-
-    @abstractmethod
-    async def run_calculation(self, system_or_state: Any, **kwargs: Any) -> Any:
-        """
-        Runs the calculation.
-        'system_or_state' is what was returned by setup_calculation.
-        Returns the results of the calculation.
-        """
-        pass
-
-    @abstractmethod
-    async def get_results(self, calculation_handle_or_id: Any) -> Dict[str, Any]:
-        """
-        Retrieves results for a completed or ongoing calculation.
-        """
-        pass
-
-    @abstractmethod
-    async def cleanup_calculation(self, system_or_state: Any) -> None:
-        """
-        Cleans up any resources associated with a calculation.
-        """
-        pass
-
-
-import uuid # For generating unique job IDs
-import asyncio # For simulating async operations
 from src.utils.logging_config import get_logger
 
-logger = get_logger(__name__)
-
-class AbacusEngine(ComputeEngine):
+class AbacusEngine:
     """
     Engine for managing Abacus (DFT) calculations.
-    This class will handle preparing inputs, submitting calculations,
-    monitoring status, and retrieving results for Abacus.
+    This class handles preparing inputs, running calculations (mocked),
+    and retrieving results (mocked).
     """
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
@@ -59,242 +22,260 @@ class AbacusEngine(ComputeEngine):
             config: Configuration for the engine, e.g., Abacus executable path,
                     default working directory, cluster submission templates.
         """
-        self.config = config or {}
-        self.abacus_executable = self.config.get("abacus_executable_path", "abacus") # Placeholder
-        self.work_dir_template = self.config.get("work_dir_template", "/tmp/abacus_jobs/{job_id}")
-        logger.info(f"AbacusEngine initialized. Executable: {self.abacus_executable}, WorkDir: {self.work_dir_template}")
-        # In a real scenario, this might check for Abacus availability or setup connections.
+        self.logger = get_logger(__name__)
+        self.config: Dict[str, Any] = config if config is not None else {}
+        self.abacus_command: str = self.config.get("abacus_command", "abacus")
 
-    async def submit_calculation(self, task_config: Dict[str, Any]) -> str:
+        self.logger.info(
+            f"AbacusEngine initialized. Command: '{self.abacus_command}'. "
+            f"Config: {self.config}"
+        )
+
+    async def prepare_input(self, task_id: str, params: Dict[str, Any], work_dir: str) -> Dict[str, Any]:
         """
-        Submits a new Abacus calculation.
-        This involves:
-        1. Generating a unique job ID.
-        2. Creating a working directory.
-        3. Preparing Abacus input files based on task_config.
-        4. Submitting the job (e.g., run Abacus locally or submit to a cluster).
+        Prepares all necessary input files for an Abacus calculation.
+        (Mock Implementation)
 
         Args:
-            task_config: A dictionary containing all necessary information for the
-                         Abacus calculation (e.g., structure, parameters, resources).
-                         This comes from the `create_dft_calculation` tool.
+            task_id: Unique identifier for the task.
+            params: Dictionary of parameters for the calculation.
+                    (e.g., structure, k-points, XC functional, etc.)
+            work_dir: The working directory for this calculation.
 
         Returns:
-            A unique job ID for the submitted calculation.
+            A dictionary summarizing prepared inputs.
         """
-        job_id = str(uuid.uuid4())
-        logger.info(f"Submitting Abacus calculation with task_config: {task_config}. Assigned Job ID: {job_id}")
+        self.logger.info(f"Task [{task_id}]: Preparing Abacus input in '{work_dir}' with params: {params}")
 
-        # Placeholder for actual submission logic.
-        # Future implementation should include robust error handling for:
-        # 1. Work directory creation (e.g., os.makedirs): catch OSError.
-        # 2. Input file writing: catch IOError, OSError.
-        # 3. Abacus execution (local subprocess or cluster submission):
-        #    - Local: catch CalledProcessError, FileNotFoundError for executable.
-        #    - Cluster: catch errors from submission commands (e.g., sbatch, qsub).
-        # Consider raising custom AbacusEngineError for these cases.
+        try:
+            if not os.path.exists(work_dir):
+                os.makedirs(work_dir, exist_ok=True)
+                self.logger.info(f"Task [{task_id}]: Created working directory: {work_dir}")
+        except OSError as e:
+            self.logger.error(f"Task [{task_id}]: Failed to create working directory {work_dir}: {e}")
+            raise # Re-raise the exception to be handled by the caller
 
-        await asyncio.sleep(0.5) # Simulate submission overhead
-        logger.info(f"Abacus job {job_id} submitted (placeholder).")
-        # Store job state if managing internally (e.g., in a dictionary or database)
-        # self._running_jobs[job_id] = {"status": "submitted", "config": task_config}
-        return job_id
-
-    async def get_calculation_status(self, job_id: str) -> Dict[str, Any]:
-        """
-        Retrieves the status of an Abacus calculation.
-
-        Args:
-            job_id: The unique ID of the job.
-
-        Returns:
-            A dictionary containing status information (e.g., "queued", "running",
-            "completed", "failed", "unknown") and potentially progress or error details.
-        """
-        logger.info(f"Getting status for Abacus job ID: {job_id}")
-        # Placeholder: Query job scheduler (e.g., `squeue`, `qstat`) or check internal state.
-        await asyncio.sleep(0.1)
-        # Example statuses
-        statuses = ["queued", "running", "completed_successfully", "failed_error_parse", "unknown_job_id"]
-        # Simulate different statuses for testing
-        simulated_status = statuses[hash(job_id) % len(statuses)]
-        
-        if simulated_status == "unknown_job_id":
-             return {"job_id": job_id, "status": "unknown", "message": "Job ID not found."}
-
-        return {"job_id": job_id, "status": simulated_status, "progress_percent": 75 if simulated_status == "running" else 100}
-
-    async def get_calculation_results(self, job_id: str, requested_items: Optional[list[str]] = None) -> Dict[str, Any]:
-        """
-        Retrieves the results of a completed Abacus calculation.
-
-        Args:
-            job_id: The unique ID of the job.
-            requested_items: A list of specific result items to retrieve (e.g.,
-                             ["total_energy", "forces", "band_structure"]).
-                             If None, try to return all primary results.
-        Returns:
-            A dictionary containing the requested results. Structure depends on Abacus output.
-        """
-        logger.info(f"Getting results for Abacus job ID: {job_id}, requested items: {requested_items}")
-        # Placeholder:
-        # 1. Check job status; only proceed if completed.
-        # 2. Locate output files in the job's working directory.
-        # 3. Parse output files (e.g., OUT.ABACUS, OUTCAR-like files, band structure data).
-        await asyncio.sleep(0.2)
-        
-        # Simulate results based on job_id
-        if hash(job_id) % 3 == 0: # Simulate failure or not found for some
-             return {"job_id": job_id, "error": "Results not available or job failed/not found."}
-
-        results_data = {
-            "total_energy_ev": -1234.56 + hash(job_id) % 10,
-            "forces_on_atoms": [[0.01, 0.0, -0.02], ...], # Placeholder
-            "band_gap_ev": 1.5 + (hash(job_id) % 5) / 10.0,
-            "converged_scf": True,
-            "output_files": {
-                "main_log": f"{self.work_dir_template.format(job_id=job_id)}/OUT.ABACUS",
-                "structure_out": f"{self.work_dir_template.format(job_id=job_id)}/STRU_OUT"
-            }
+        # Mock: Create a dummy INPUT file (typical for Abacus)
+        input_file_path = os.path.join(work_dir, "INPUT")
+        input_content = {
+            "general_parameters": params.get("general_parameters", {}),
+            "atomic_species": params.get("atomic_species", []),
+            "k_points": params.get("k_points", {}),
+            # Add other relevant sections based on params
         }
-        if requested_items:
-            return {"job_id": job_id, **{k: results_data[k] for k in requested_items if k in results_data}}
-        return {"job_id": job_id, **results_data}
+        try:
+            with open(input_file_path, 'w') as f:
+                json.dump(input_content, f, indent=4) # Using JSON for dummy INPUT for simplicity
+            self.logger.info(f"Task [{task_id}]: Created dummy INPUT file at {input_file_path}")
+        except IOError as e:
+            self.logger.error(f"Task [{task_id}]: Failed to write INPUT file {input_file_path}: {e}")
+            raise
 
-    async def cancel_calculation(self, job_id: str) -> bool:
+        # Mock: Create a dummy structure file (e.g., STRU or atoms.json)
+        stru_file_path = os.path.join(work_dir, "stru.json") # Example name
+        structure_data = params.get("structure_data", {"comment": "No structure provided"})
+        try:
+            with open(stru_file_path, 'w') as f:
+                json.dump(structure_data, f, indent=4)
+            self.logger.info(f"Task [{task_id}]: Created dummy structure file at {stru_file_path}")
+        except IOError as e:
+            self.logger.error(f"Task [{task_id}]: Failed to write structure file {stru_file_path}: {e}")
+            raise
+
+        prepared_files = [os.path.basename(input_file_path), os.path.basename(stru_file_path)]
+        
+        return {
+            "input_files": prepared_files,
+            "work_dir": work_dir,
+            "message": f"Input files prepared for task {task_id}."
+        }
+
+    async def run_calculation(self, task_id: str, work_dir: str, common_command: Optional[str] = None) -> Dict[str, Any]:
         """
-        Cancels/stops an ongoing Abacus calculation.
+        Executes the Abacus calculation.
+        (Mock Implementation)
 
         Args:
-            job_id: The unique ID of the job to cancel.
+            task_id: Unique identifier for the task.
+            work_dir: The working directory where input files are located.
+            common_command: The command to run Abacus (e.g., "abacus", "mpirun -np 4 abacus").
+                            If None, uses self.abacus_command.
 
         Returns:
-            True if cancellation was successful or acknowledged, False otherwise.
+            A dictionary indicating success or failure of the (mock) run.
         """
-        logger.info(f"Attempting to cancel Abacus job ID: {job_id}")
-        # Placeholder: Use `scancel`, `qdel`, or kill the local process.
-        await asyncio.sleep(0.1)
-        # Simulate success/failure
-        success = hash(job_id) % 2 == 0
-        if success:
-            logger.info(f"Abacus job {job_id} cancellation request submitted (placeholder).")
-            # Update internal state if any: self._running_jobs[job_id]['status'] = 'cancelled'
-        else:
-            logger.warning(f"Failed to cancel Abacus job {job_id} (placeholder).")
-        return success
+        effective_command = common_command if common_command is not None else self.abacus_command
+        self.logger.info(f"Task [{task_id}]: Starting mock Abacus calculation in '{work_dir}' using command: {effective_command}")
 
-    async def cleanup_workspace(self, job_id: str) -> None:
+        # Mock: Simulate Abacus execution time
+        await asyncio.sleep(2) # Simulate some computation time
+
+        # Mock: Create a dummy output log file
+        # Example: OUT.ABACUS/running_scf.log (Abacus often creates subdirs for output)
+        output_subdir = os.path.join(work_dir, "OUT.ABACUS")
+        try:
+            if not os.path.exists(output_subdir):
+                os.makedirs(output_subdir, exist_ok=True)
+        except OSError as e:
+            self.logger.error(f"Task [{task_id}]: Failed to create output subdirectory {output_subdir}: {e}")
+            # Continue without it for mock, or raise depending on desired strictness
+
+        log_file_path = os.path.join(output_subdir, "running_scf.log")
+        mock_log_content = (
+            f"Mock ABACUS calculation for task {task_id}\n"
+            "SCF calculation started.\n"
+            "Iteration 1: Energy = -123.50 eV\n"
+            "Iteration 2: Energy = -123.48 eV\n"
+            "Convergence reached.\n"
+            "Total Energy = -123.45 eV\n"
+        )
+        try:
+            with open(log_file_path, 'w') as f:
+                f.write(mock_log_content)
+            self.logger.info(f"Task [{task_id}]: Created dummy output log at {log_file_path}")
+        except IOError as e:
+            self.logger.error(f"Task [{task_id}]: Failed to write mock output log {log_file_path}: {e}")
+            # Not raising here as it's just a mock output, main process "succeeded"
+
+        # Mock: Create a dummy results summary file (e.g. results.json)
+        results_summary_path = os.path.join(work_dir, "results.json")
+        mock_results = {
+            "task_id": task_id,
+            "final_energy_ev": -123.45,
+            "converged": True,
+            "iterations": 2,
+            "warnings": []
+        }
+        try:
+            with open(results_summary_path, 'w') as f:
+                json.dump(mock_results, f, indent=4)
+            self.logger.info(f"Task [{task_id}]: Created dummy results summary at {results_summary_path}")
+        except IOError as e:
+            self.logger.error(f"Task [{task_id}]: Failed to write results summary {results_summary_path}: {e}")
+
+
+        self.logger.info(f"Task [{task_id}]: Mock Abacus calculation finished in '{work_dir}'.")
+        return {"status": "completed", "message": f"Mock Abacus run for task {task_id} finished."}
+
+    async def get_results(self, task_id: str, work_dir: str) -> Dict[str, Any]:
         """
-        Cleans up the working directory and any temporary files associated with an Abacus job.
+        Parses output files and extracts key results from an Abacus calculation.
+        (Mock Implementation)
 
         Args:
-            job_id: The unique ID of the job whose workspace needs cleaning.
+            task_id: Unique identifier for the task.
+            work_dir: The working directory where output files are located.
+
+        Returns:
+            A dictionary of mock results.
         """
-        logger.info(f"Cleaning up workspace for Abacus job ID: {job_id}")
-        # Placeholder: Delete the job's working directory.
-        # work_dir = self.work_dir_template.format(job_id=job_id)
-        # if os.path.exists(work_dir): shutil.rmtree(work_dir)
-        await asyncio.sleep(0.05)
-        logger.info(f"Workspace for job {job_id} cleaned (placeholder).")
+        self.logger.info(f"Task [{task_id}]: Retrieving results from '{work_dir}'.")
 
-    # --- Overriding ComputeEngine abstract methods (if still inheriting) ---
-    # These might need to be re-thought if the AbacusEngine's primary interface
-    # is submit_calculation, get_status, etc.
-    # For now, providing basic placeholder implementations.
+        # Mock: Read the dummy results.json file
+        results_summary_path = os.path.join(work_dir, "results.json")
+        if os.path.exists(results_summary_path):
+            try:
+                with open(results_summary_path, 'r') as f:
+                    results = json.load(f)
+                self.logger.info(f"Task [{task_id}]: Successfully read results from {results_summary_path}")
+                return results
+            except (IOError, json.JSONDecodeError) as e:
+                self.logger.error(f"Task [{task_id}]: Failed to read or parse results file {results_summary_path}: {e}")
+                return {"error": "Failed to parse results file.", "task_id": task_id}
+        else:
+            # Fallback if results.json doesn't exist, try parsing the log
+            log_file_path = os.path.join(work_dir, "OUT.ABACUS", "running_scf.log")
+            if os.path.exists(log_file_path):
+                self.logger.warning(f"Task [{task_id}]: results.json not found, attempting to parse {log_file_path}")
+                # Extremely simple mock parsing
+                try:
+                    with open(log_file_path, 'r') as f:
+                        content = f.read()
+                    if "Total Energy = -123.45 eV" in content and "Convergence reached" in content:
+                        return {"energy": -123.45, "status": "converged", "task_id": task_id, "source": "log_fallback"}
+                    else:
+                        return {"energy": None, "status": "unknown_from_log", "task_id": task_id, "source": "log_fallback"}
+                except IOError as e:
+                    self.logger.error(f"Task [{task_id}]: Failed to read log file {log_file_path}: {e}")
+                    return {"error": "Failed to read log file.", "task_id": task_id}
+            else:
+                self.logger.error(f"Task [{task_id}]: No output files (results.json or log) found in {work_dir} or {os.path.join(work_dir, 'OUT.ABACUS')}")
+                return {"error": "No output files found.", "task_id": task_id}
 
-    async def setup_calculation(self, config: Dict[str, Any]) -> Any:
-        logger.warning("AbacusEngine.setup_calculation is a legacy method. Use submit_calculation.")
-        # This could potentially prepare a config for submit_calculation but not submit yet.
-        return {"job_id_placeholder": str(uuid.uuid4()), "prepared_config": config}
 
-    async def run_calculation(self, system_or_state: Any, **kwargs: Any) -> Any:
-        logger.warning("AbacusEngine.run_calculation is a legacy method. Use submit_calculation and get_results.")
-        # This is tricky to map directly. If system_or_state contains a job_id,
-        # it might try to ensure it's running or fetch results.
-        if isinstance(system_or_state, dict) and "job_id_placeholder" in system_or_state:
-            return await self.get_calculation_results(system_or_state["job_id_placeholder"])
-        return {"error": "Legacy run_calculation called with unexpected state."}
+    async def cleanup_calculation(self, task_id: str, work_dir: str) -> None:
+        """
+        Cleans up any intermediate files after calculation.
+        (Mock Implementation)
 
-    async def get_results(self, calculation_handle_or_id: Any) -> Dict[str, Any]:
-        logger.info(f"AbacusEngine.get_results (legacy) called with: {calculation_handle_or_id}")
-        if isinstance(calculation_handle_or_id, str): # Assume it's a job_id
-            return await self.get_calculation_results(calculation_handle_or_id)
-        return {"error": "Legacy get_results expects a job_id string."}
+        Args:
+            task_id: Unique identifier for the task.
+            work_dir: The working directory to clean up.
+        """
+        self.logger.info(f"Task [{task_id}]: Cleaning up calculation in '{work_dir}'.")
 
-    async def cleanup_calculation(self, system_or_state: Any) -> None:
-        logger.warning("AbacusEngine.cleanup_calculation is a legacy method. Use cleanup_workspace with job_id.")
-        if isinstance(system_or_state, dict) and "job_id_placeholder" in system_or_state:
-            await self.cleanup_workspace(system_or_state["job_id_placeholder"])
+        # Example: remove a specific temporary file if it exists
+        temp_file_example = os.path.join(work_dir, "TEMP_SCRATCH_FILE.tmp")
+        if os.path.exists(temp_file_example):
+            try:
+                os.remove(temp_file_example)
+                self.logger.info(f"Task [{task_id}]: Removed temporary file {temp_file_example}")
+            except OSError as e:
+                self.logger.error(f"Task [{task_id}]: Error removing temporary file {temp_file_example}: {e}")
 
-# Example usage (for testing this module directly)
-# async def _test_abacus_engine_new_interface():
-#     engine = AbacusEngine()
-#     dft_task_config = {
-#         "input_structure_data": "Si POSCAR content...",
-#         "abacus_parameters": {"kpoints": "4 4 4", "ecutwfc": 50},
-#         "requested_resources": {"nodes": 1, "cores_per_node": 16}
-#     }
-#     try:
-#         job_id = await engine.submit_calculation(dft_task_config)
-#         print(f"Submitted Abacus job with ID: {job_id}")
-#
-#         status = await engine.get_calculation_status(job_id)
-#         print(f"Status for job {job_id}: {status}")
-#
-#         # Simulate waiting for completion if status is running/queued
-#         while status.get("status") in ["queued", "running"]:
-#             print("Waiting for job to complete...")
-#             await asyncio.sleep(0.5) # Poll interval
-#             status = await engine.get_calculation_status(job_id)
-#             print(f"New status for job {job_id}: {status}")
-#             if status.get("status") not in ["queued", "running"]:
-#                 break
-#
-#         if status.get("status") == "completed_successfully":
-#             results = await engine.get_calculation_results(job_id, requested_items=["total_energy_ev", "band_gap_ev"])
-#             print(f"Results for job {job_id}: {results}")
-#         else:
-#             print(f"Job {job_id} did not complete successfully. Status: {status.get('status')}")
-#
-#         # Test cancellation (optional, might depend on simulated status)
-#         # if await engine.cancel_calculation(job_id):
-#         #     print(f"Cancellation requested for job {job_id}")
-#
-#         await engine.cleanup_workspace(job_id)
-#         print(f"Workspace cleaned for job {job_id}")
-#
-#     except Exception as e:
-#         print(f"Error during AbacusEngine new interface test: {e}", exc_info=True)
-#
-# if __name__ == "__main__":
-#     import asyncio
-#     asyncio.run(_test_abacus_engine_new_interface())
-#     engine = AbacusEngine()
-#     dft_config = {
-#         "structure": "H2O.xyz_content_or_path",
-#         "basis_set": "6-31g*",
-#         "functional": "B3LYP",
-#         "kpoints": {"scheme": "gamma"}
-#     }
-#     try:
-#         system_handle = await engine.setup_dft_calculation(
-#             structure=dft_config["structure"],
-#             basis=dft_config["basis_set"],
-#             functional=dft_config["functional"],
-#             kpoints=dft_config["kpoints"]
-#         )
-#         print(f"Abacus setup handle: {system_handle}")
+        # For a full cleanup, one might use shutil.rmtree(work_dir),
+        # but that should be handled carefully by the TaskManager or caller
+        # depending on whether the work_dir is meant to be persistent or not.
+        # For this mock, we'll just log that cleanup is "done".
+        self.logger.info(f"Task [{task_id}]: Mock cleanup finished for '{work_dir}'. Workspace preservation depends on caller.")
+        pass
 
-#         results = await engine.run_scf(system_handle, max_iter=50)
-#         print(f"Abacus SCF results: {results}")
+# Example of how this engine might be used by a task manager or tool
+async def _test_abacus_engine_methods():
+    engine = AbacusEngine(config={"abacus_command": "abacus_mpi"})
+    test_task_id = "test_dft_task_001"
+    test_work_dir = f"/tmp/abacus_test_jobs/{test_task_id}" # More specific test work_dir
 
-#         retrieved_results = await engine.get_results(results) # Test get_results
-#         print(f"Abacus retrieved results: {retrieved_results}")
+    # Ensure clean slate for test
+    if os.path.exists(test_work_dir):
+        import shutil
+        shutil.rmtree(test_work_dir)
 
-#         await engine.cleanup_calculation(system_handle)
-#     except Exception as e:
-#         print(f"Error during AbacusEngine test: {e}")
+    test_params = {
+        "general_parameters": {"calculation_type": "scf"},
+        "atomic_species": [{"name": "Si", "pseudo_potential": "Si.UPF"}],
+        "k_points": {"scheme": "gamma", "grid": [4,4,4]},
+        "structure_data": {"comment": "Silicon test structure", "atoms": [{"element": "Si", "position": [0,0,0]}]}
+    }
 
-# if __name__ == "__main__":
-#     import asyncio
-#     asyncio.run(_test_abacus_engine())
+    try:
+        print(f"--- Testing AbacusEngine for task: {test_task_id} ---")
+        prep_info = await engine.prepare_input(test_task_id, test_params, test_work_dir)
+        print(f"Preparation info: {prep_info}")
+
+        run_info = await engine.run_calculation(test_task_id, test_work_dir)
+        print(f"Run info: {run_info}")
+
+        results_info = await engine.get_results(test_task_id, test_work_dir)
+        print(f"Results info: {results_info}")
+
+        await engine.cleanup_calculation(test_task_id, test_work_dir)
+        print(f"Cleanup for task {test_task_id} called.")
+        print(f"--- Test finished for task: {test_task_id} ---")
+
+    except Exception as e:
+        print(f"Error during AbacusEngine test: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        # Optional: final cleanup of the test_work_dir parent if empty
+        # Or leave it for manual inspection
+        pass
+
+
+if __name__ == "__main__":
+    # Configure basic logging for the test
+    import logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+
+    asyncio.run(_test_abacus_engine_methods())

@@ -10,6 +10,59 @@ logger = get_logger(__name__)
 # This tool would typically be registered with the MCP server (e.g., in server.py)
 # For now, we define the function that would be called by the server's call_tool handler.
 
+CREATE_MD_SIMULATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "pdb_file": {"type": "string", "description": "PDB content as a string. Server-side file paths are not currently supported."},
+        "pdb_input_type": {"type": "string", "enum": ["content"], "default": "content", "description": "Specifies that 'pdb_file' contains PDB content."},
+        "forcefield": {"type": "array", "items": {"type": "string"}, "description": "List of force field XML file names (e.g., ['amber14-all.xml', 'amber14/tip3pfb.xml'])."},
+        "steps": {"type": "integer", "description": "Number of simulation steps."},
+        "integrator": {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string", "enum": ["LangevinMiddle", "Verlet", "Brownian"], "default": "LangevinMiddle", "description": "Type of integrator."},
+                "temperature_K": {"type": "number", "description": "Temperature in Kelvin (e.g., 300.0)."},
+                "friction_coeff_ps": {"type": "number", "description": "Friction coefficient in 1/picoseconds (e.g., 1.0)."},
+                "step_size_ps": {"type": "number", "description": "Step size in picoseconds (e.g., 0.002)."}
+            },
+            "required": ["type"],
+            "description": "Integrator configuration."
+        },
+        "platform": {"type": "string", "enum": ["CPU", "CUDA", "OpenCL", "Reference"], "description": "OpenMM platform to use (e.g., 'CPU', 'CUDA'). Defaults to app_config.DEFAULT_OPENMM_PLATFORM."},
+        "platform_properties": {"type": "object", "description": "Platform-specific properties (e.g., {\"Precision\":\"mixed\"})."},
+        "output_config": {
+            "type": "object",
+            "properties": {
+                "state_data_reporter": {
+                    "type": "array", "items": {"type": "object"},
+                    "description": "Configuration for state data reporter(s)."
+                },
+                "dcd_reporter": {
+                    "type": "array", "items": {"type": "object"},
+                    "description": "Configuration for DCD trajectory reporter(s)."
+                },
+                "pdb_reporter": {
+                     "type": "array", "items": {"type": "object"},
+                    "description": "Configuration for PDB reporter for snapshots."
+                },
+                "checkpoint_reporter": {
+                    "type": "object", # Usually single
+                    "description": "Configuration for checkpoint reporter."
+                }
+            },
+            "description": "Configuration for simulation output reporters."
+        },
+        "minimize_energy": {"type": "boolean", "default": False, "description": "Perform energy minimization before simulation."},
+        "minimize_max_iterations": {"type": "integer", "default": 0, "description": "Max iterations for minimization (0 for OpenMM default)."},
+        "minimize_tolerance_kj_mol_nm": {"type": "number", "description": "Minimization energy tolerance in kJ/mol/nm."},
+        "set_velocities_to_temperature": {"type": "boolean", "default": False, "description": "Set initial velocities to temperature if integrator allows."},
+        "run_chunk_size": {"type": "integer", "description": "Number of steps per simulation execution chunk."},
+        "checkpoint_interval_steps": {"type": "integer", "description": "Interval for saving checkpoints during a run chunk."}
+    },
+    "required": ["pdb_file", "forcefield", "steps", "integrator"]
+}
+
+
 async def run_create_md_simulation(task_manager: TaskManager, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """
     Creates a new molecular dynamics simulation task.

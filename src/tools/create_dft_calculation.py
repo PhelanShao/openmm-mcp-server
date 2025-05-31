@@ -3,8 +3,8 @@
 
 from mcp import types as mcp_types
 from src.utils.logging_config import get_logger
-# from src.task_manager import TaskManager # Or a new DftTaskManager
-# from src.abacus_engine import AbacusEngine
+from src.task_manager import TaskManager # Import TaskManager
+# from src.abacus_engine import AbacusEngine # AbacusEngine is used by TaskManager
 
 logger = get_logger(__name__)
 
@@ -42,14 +42,14 @@ CREATE_DFT_CALCULATION_SCHEMA = {
 
 
 async def run_create_dft_calculation(
-    task_manager, # Placeholder: This might be a different TaskManager or AbacusEngine directly
+    task_manager: TaskManager,
     arguments: dict
 ) -> mcp_types.ToolResult:
     """
-    Handles the creation of a new DFT calculation task using Abacus.
+    Handles the creation of a new DFT calculation task via the TaskManager.
 
     Args:
-        task_manager: The task manager instance (or Abacus engine).
+        task_manager: The TaskManager instance.
         arguments: A dictionary containing the tool arguments, conforming to CREATE_DFT_CALCULATION_SCHEMA.
 
     Returns:
@@ -58,98 +58,73 @@ async def run_create_dft_calculation(
     logger.info(f"Running create_dft_calculation with arguments: {arguments}")
 
     # 1. Validate arguments against the schema (FastMCP might do some validation)
-    #    For complex validation, consider using a library like jsonschema.
-    #    Example basic check:
-    if not all(key in arguments for key in CREATE_DFT_CALCULATION_SCHEMA["required"]):
-        logger.warning("Missing required arguments for create_dft_calculation.")
-        raise mcp_types.InvalidToolArgumentsError("Missing required arguments.")
+    # 1. Argument validation (FastMCP might do basic validation based on schema)
+    #    The schema defines 'input_structure' and 'calculation_parameters' as required.
+    #    Additional detailed validation can be done here if needed.
+    #    The existing validation logic is quite good and can be largely kept.
 
-    input_structure = arguments["input_structure"] # Expected to be string (content)
-    calc_params = arguments["calculation_parameters"] # Expected to be an object
-    compute_res = arguments.get("compute_resources", {}) # Optional, expected to be an object
-
-    # --- Detailed validation for nested parameters ---
-
-    # Validate calculation_parameters
-    if not isinstance(calc_params, dict):
-        raise mcp_types.InvalidToolArgumentsError("'calculation_parameters' must be an object.")
-    
-    required_calc_keys = CREATE_DFT_CALCULATION_SCHEMA["properties"]["calculation_parameters"].get("required", [])
-    for key in required_calc_keys:
-        if key not in calc_params:
-            raise mcp_types.InvalidToolArgumentsError(f"Missing required key '{key}' in 'calculation_parameters'.")
-
-    # Validate type for ecutwfc
-    if "ecutwfc" in calc_params and not isinstance(calc_params["ecutwfc"], (int, float)):
-        raise mcp_types.InvalidToolArgumentsError("'calculation_parameters.ecutwfc' must be a number.")
-    # Validate type for kpoints (should be string as per schema)
-    if "kpoints" in calc_params and not isinstance(calc_params["kpoints"], str):
-        raise mcp_types.InvalidToolArgumentsError("'calculation_parameters.kpoints' must be a string.")
-
-    # Validate compute_resources if provided
-    if compute_res: # It defaults to {} if not provided, so this checks if it was actually given
-        if not isinstance(compute_res, dict):
-            raise mcp_types.InvalidToolArgumentsError("'compute_resources' must be an object if provided.")
-        
-        if "nodes" in compute_res and not isinstance(compute_res["nodes"], int):
-            raise mcp_types.InvalidToolArgumentsError("'compute_resources.nodes' must be an integer.")
-        if "cores_per_node" in compute_res and not isinstance(compute_res["cores_per_node"], int):
-            raise mcp_types.InvalidToolArgumentsError("'compute_resources.cores_per_node' must be an integer.")
-        if "walltime_hours" in compute_res and not isinstance(compute_res["walltime_hours"], (int, float)):
-            raise mcp_types.InvalidToolArgumentsError("'compute_resources.walltime_hours' must be a number.")
-
-    # SECURITY NOTE for input_structure:
-    # The schema describes 'input_structure' as "content or path".
-    # Currently, this tool passes it directly as 'input_structure_data' to AbacusEngine.
-    # If AbacusEngine were to interpret this as a server-side file path without sanitization,
-    # it would be a path traversal vulnerability.
-    # For safety, this implementation assumes 'input_structure' is primarily intended as content.
-    # If server-side path access is ever implemented, it MUST be done securely (e.g., restricted base directory).
-
-    # 2. Prepare task configuration for AbacusEngine/TaskManager
-    #    This will involve translating MCP tool arguments into a format
-    #    that the AbacusEngine can understand.
-    dft_task_config = {
-        "type": "dft_abacus", # Differentiate from MD tasks
-        "input_structure_data": input_structure,
-        "abacus_parameters": calc_params,
-        "requested_resources": compute_res,
-        # Potentially add user info, submission time, etc.
-    }
-
-    # 3. Interact with AbacusEngine or a specialized TaskManager
-    #    This part is highly dependent on AbacusEngine's design.
-    #    For now, this is a placeholder.
     try:
-        # Example:
-        # if not hasattr(task_manager, 'submit_dft_task'): # Check if using a generic TM
-        #     logger.error("TaskManager does not support DFT tasks or AbacusEngine not integrated.")
-        #     raise NotImplementedError("DFT task submission not implemented in the current TaskManager/AbacusEngine.")
-        #
-        # task_id = await task_manager.submit_dft_task(dft_task_config)
+        if not all(key in arguments for key in CREATE_DFT_CALCULATION_SCHEMA["required"]):
+            logger.warning("Missing required arguments for create_dft_calculation.")
+            raise mcp_types.InvalidToolArgumentsError("Missing required arguments based on schema.")
 
-        # Placeholder until AbacusEngine and its integration are defined:
-        task_id = f"dft-task-placeholder-{hash(str(arguments))}"
-        logger.info(f"Placeholder DFT task created with ID: {task_id}")
+        input_structure_content = arguments["input_structure"] # String content
+        calculation_params = arguments["calculation_parameters"] # Object/dict
+        compute_resources = arguments.get("compute_resources", {}) # Optional
+
+        # Validate calculation_parameters structure (example, can be more detailed)
+        if not isinstance(calculation_params, dict):
+            raise mcp_types.InvalidToolArgumentsError("'calculation_parameters' must be an object.")
+        required_calc_keys = CREATE_DFT_CALCULATION_SCHEMA["properties"]["calculation_parameters"].get("required", [])
+        for key in required_calc_keys:
+            if key not in calculation_params:
+                raise mcp_types.InvalidToolArgumentsError(f"Missing required key '{key}' in 'calculation_parameters'.")
         
-        # Simulate submission to an Abacus system (actual implementation will be async)
-        # await abacus_engine.submit_calculation(dft_task_config)
+        # Further type checks as in original code...
+        if "ecutwfc" in calculation_params and not isinstance(calculation_params["ecutwfc"], (int, float)):
+             raise mcp_types.InvalidToolArgumentsError("'calculation_parameters.ecutwfc' must be a number.")
+        if "kpoints" in calculation_params and not isinstance(calculation_params["kpoints"], str): # As per schema
+             raise mcp_types.InvalidToolArgumentsError("'calculation_parameters.kpoints' must be a string.")
 
+
+        # 2. Construct task configuration for TaskManager
+        #    This includes the task_type and DFT-specific parameters.
+        task_config = {
+            "task_type": "dft",
+            "dft_params": { # Nest all DFT related parameters under a specific key
+                "input_structure": input_structure_content,
+                "calculation_parameters": calculation_params,
+                "compute_resources": compute_resources
+            },
+            # Include other parameters that might be relevant for AbacusEngine via TaskManager
+            # For example, if Abacus command needs to be specified per task:
+            # "abacus_command": arguments.get("abacus_command_override")
+        }
+
+        # 3. Create task using TaskManager
+        task_id = await task_manager.create_task(task_config)
+
+        logger.info(f"DFT calculation task created successfully with ID: {task_id}")
         return mcp_types.ToolResult(
-            content={
+            status_code=0, # Using 0 for success as per common conventions if not specified otherwise
+            data={ # Changed from 'content' to 'data' to align with potential ToolResult evolution
                 "task_id": task_id,
-                "status": "submitted_placeholder",
-                "message": "DFT calculation task submitted (placeholder). Actual submission to Abacus backend pending."
+                "status": "pending", # Initial status after creation
+                "message": "DFT calculation task created successfully."
             }
         )
-    except mcp_types.InvalidToolArgumentsError:
-        raise # Re-raise for FastMCP to handle
-    except NotImplementedError as e:
-        logger.error(f"Feature not implemented: {e}", exc_info=True)
-        raise mcp_types.MCPError(f"Feature not implemented: {e}")
+
+    except mcp_types.InvalidToolArgumentsError as e:
+        logger.warning(f"Invalid arguments for create_dft_calculation: {e}")
+        raise # Re-raise for FastMCP to handle and return appropriate error to client
+    except ValueError as ve: # Catch ValueErrors from task_manager.create_task
+        logger.error(f"ValueError during DFT task creation: {ve}", exc_info=True)
+        # Return as a generic MCPError or a more specific one if available
+        raise mcp_types.MCPError(f"Failed to create DFT task due to invalid configuration: {ve}")
     except Exception as e:
-        logger.error(f"Error during DFT task creation: {e}", exc_info=True)
-        raise mcp_types.MCPError(f"Failed to create DFT task: {e}")
+        logger.error(f"Unexpected error during DFT task creation: {e}", exc_info=True)
+        # Generic error for unexpected issues
+        raise mcp_types.MCPError(f"An unexpected error occurred while creating the DFT task: {e}")
 
 # Example of how this tool's definition could be registered if not hardcoded in server.py
 # def get_tool_definition() -> mcp_types.ToolDefinition:
