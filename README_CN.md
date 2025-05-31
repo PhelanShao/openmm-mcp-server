@@ -33,9 +33,9 @@ conda install -c conda-forge openmm
 python test_mcp_server.py
 ```
 
-### Roo Code 集成
+### Code 集成
 
-在您的Roo Code MCP设置中添加：
+在您的Code/Cline/Claude MCP MCP设置中添加：
 
 ```json
 {
@@ -43,7 +43,7 @@ python test_mcp_server.py
     "openmm-server": {
       "command": "python",
       "args": ["run_openmm_server.py"],
-      "cwd": "F:\\develop\\openmm-mcp-server",
+      "cwd": "Path_to\\openmm-mcp-server",
       "alwaysAllow": [
         "create_md_simulation",
         "create_advanced_md_simulation",
