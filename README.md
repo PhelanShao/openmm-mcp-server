@@ -39,7 +39,7 @@ python test_mcp_server.py
 
 ##### Roo Code Integration
 
-Add to your Roo Code MCP settings:
+Add to your Code/Cline/Claude MCP settings:
 
 ```json
 {
@@ -47,7 +47,7 @@ Add to your Roo Code MCP settings:
     "openmm-server": {
       "command": "python",
       "args": ["run_openmm_server.py"],
-      "cwd": "F:\\develop\\openmm-mcp-server",
+      "cwd": "path-to\\openmm-mcp-server",
       "alwaysAllow": [
         "create_md_simulation",
         "create_advanced_md_simulation",
