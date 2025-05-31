@@ -1,0 +1,33 @@
+{
+    "task_id": "7b925efb-2eb9-407e-a8d4-d7263a94d317",
+    "config": {
+        "task_type": "md",
+        "pdb_data": "HETATM    1  O   HOH A   1      -0.778   0.000   0.000  1.00  0.00           O  \nHETATM    2  H1  HOH A   1      -0.178   0.759   0.000  1.00  0.00           H  \nHETATM    3  H2  HOH A   1      -0.178  -0.759   0.000  1.00  0.00           H  \nEND\n",
+        "pdb_input_type": "content",
+        "forcefield_files": [
+            "amber14-all.xml",
+            "amber14/tip3pfb.xml"
+        ],
+        "steps": 1000,
+        "integrator": {
+            "type": "LangevinMiddle",
+            "temperature_K": 300,
+            "friction_coeff_ps": 1.0,
+            "step_size_ps": 0.002
+        },
+        "platform_name": null,
+        "output_config": {},
+        "minimize_energy": true,
+        "nonbonded_method": "PME",
+        "nonbonded_cutoff_nm": 1.0,
+        "constraints": "HBonds"
+    },
+    "task_type": "md",
+    "status": "pending",
+    "progress": {
+        "current_step": 0,
+        "total_steps": 1000
+    },
+    "results": null,
+    "error_message": null
+}

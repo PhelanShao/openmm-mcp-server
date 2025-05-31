@@ -1,8 +1,7 @@
 # src/server.py
 # Contains the OpenMMComputeServer (MCP Core Implementation)
 
-from mcp.server.fastmcp import FastMCP
-from mcp import types as mcp_types
+from fastmcp import FastMCP
 import urllib.parse
 import os # For path operations if needed for resources
 
@@ -30,8 +29,7 @@ logger = get_logger(__name__)
 # Initialize FastMCP server
 mcp_server = FastMCP(
     name="OpenMMComputeServer",
-    version="0.1.0",
-    description="MCP Server for OpenMM molecular dynamics simulations."
+    description="MCP Server for OpenMM molecular dynamics simulations and DFT calculations."
 )
 
 # Instantiate AppConfig and TaskManager
@@ -54,8 +52,84 @@ except Exception as e:
 
 # MCP Method Implementations
 
-@mcp_server.list_resources()
-async def list_resources() -> list[mcp_types.Resource]:
+@mcp_server.resource("openmm://tasks")
+async def list_task_resources():
+    """Lists available computation resources or task-related resources."""
+    global task_manager # Ensure we are using the global task_manager instance
+
+    resources = []
+
+    if task_manager is None:
+        logger.error("TaskManager not available, cannot list dynamic resources.")
+        return {"resources": []}
+
+    try:
+        tasks = task_manager.get_all_tasks()
+        for task in tasks:
+            task_id = task.task_id
+            task_type_str = task.task_type.upper()
+
+            # Common resources for all task types
+            resources.append({
+                "uri": f"openmm://tasks/{task_id}/status",
+                "name": f"Task {task_id} ({task_type_str}) Status",
+                "description": f"Status of {task_type_str} task {task_id}.",
+                "mime_type": "application/json"
+            })
+
+            resources.append({
+                "uri": f"openmm://tasks/{task_id}/results",
+                "name": f"Task {task_id} ({task_type_str}) Results",
+                "description": f"Results of {task_type_str} task {task_id}.",
+                "mime_type": "application/json"
+            })
+
+            # Type-specific resources
+            if task.task_type == "md":
+                # MD-specific trajectory resource
+                md_trajectory_uri = f"openmm://tasks/{task_id}/trajectory/main.dcd"
+                if task.results and isinstance(task.results.get("output_files"), dict):
+                    for key, path_val in task.results["output_files"].items():
+                        if isinstance(path_val, str) and path_val.endswith(".dcd"):
+                            filename = os.path.basename(path_val)
+                            md_trajectory_uri = f"openmm://tasks/{task_id}/trajectory/{filename}"
+                            break
+                
+                resources.append({
+                    "uri": md_trajectory_uri,
+                    "name": f"Task {task_id} (MD) Trajectory",
+                    "description": f"Trajectory file for MD task {task_id}.",
+                    "mime_type": "application/vnd.chemdoodle.trajectory.dcd"
+                })
+
+            elif task.task_type == "dft":
+                # DFT-specific output files
+                dft_files = [
+                    {"filename": "INPUT", "category": "input", "mime": "application/json"},
+                    {"filename": "stru.json", "category": "input", "mime": "application/json"},
+                    {"filename": "running_scf.log", "category": "output_logs", "sub_path": "OUT.ABACUS", "mime": "text/plain"},
+                    {"filename": "results.json", "category": "results_files", "mime": "application/json"},
+                ]
+
+                for dft_file_info in dft_files:
+                    uri_filename_part = dft_file_info["filename"]
+                    if "sub_path" in dft_file_info:
+                        uri_filename_part = f"{dft_file_info['sub_path']}/{dft_file_info['filename']}"
+
+                    resources.append({
+                        "uri": f"openmm://tasks/{task_id}/outputs/{dft_file_info['category']}/{uri_filename_part}",
+                        "name": f"Task {task_id} (DFT) - {dft_file_info['filename']}",
+                        "description": f"DFT file: {dft_file_info['filename']} for task {task_id}.",
+                        "mime_type": dft_file_info["mime"]
+                    })
+
+    except Exception as e:
+        logger.error(f"Error dynamically listing resources: {e}", exc_info=True)
+
+    return {"resources": resources}
+
+# 为了兼容性，保留原始的list_resources函数但使用新的装饰器
+async def list_resources():
     """Lists available computation resources or task-related resources."""
     global task_manager # Ensure we are using the global task_manager instance
 

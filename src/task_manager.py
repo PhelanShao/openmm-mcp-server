@@ -9,6 +9,7 @@ from typing import Dict, Any, Optional
 from .openmm_engine import OpenMMEngine
 from .abacus_engine import AbacusEngine # Added for DFT tasks
 
+from .config import AppConfig
 from src.config import config as app_config # For task data directory, etc.
 import os
 import json # For JSON operations
@@ -108,17 +109,18 @@ class Task:
 class TaskManager:
     """Manages the lifecycle of OpenMM computation tasks."""
 
-    def __init__(self):
+    def __init__(self, config: Optional[AppConfig] = None):
         self.logger = get_logger(__name__)
+        self.config = config or app_config
         self._tasks: Dict[str, Task] = {}
         self._openmm_engine = OpenMMEngine()
         self._abacus_engine = AbacusEngine() # Instantiate AbacusEngine
         self._task_queue = asyncio.Queue() # For managing tasks to be run (can be used for more advanced scheduling)
-        self._concurrency_semaphore = asyncio.Semaphore(app_config.MAX_CONCURRENT_TASKS)
-        self.logger.info(f"Task manager initialized with MAX_CONCURRENT_TASKS={app_config.MAX_CONCURRENT_TASKS}")
+        self._concurrency_semaphore = asyncio.Semaphore(self.config.MAX_CONCURRENT_TASKS)
+        self.logger.info(f"Task manager initialized with MAX_CONCURRENT_TASKS={self.config.MAX_CONCURRENT_TASKS}")
         self._lock = asyncio.Lock() # For concurrent access to _tasks dictionary
         
-        task_data_dir = app_config.TASK_DATA_DIR
+        task_data_dir = self.config.TASK_DATA_DIR
         if not os.path.exists(task_data_dir):
             try:
                 os.makedirs(task_data_dir, exist_ok=True)
@@ -191,8 +193,12 @@ class TaskManager:
 
         # Basic validation for MD tasks (can be expanded)
         if task_type == "md":
-            if not config.get("pdb_file") or not config.get("forcefield_files") or config.get("steps") is None:
-                raise ValueError("MD task configuration missing required fields (pdb_file, forcefield_files, steps).")
+            # Check for either pdb_file or pdb_data
+            has_pdb = config.get("pdb_file") or config.get("pdb_data")
+            # Check for either forcefield_files or forcefield
+            has_forcefield = config.get("forcefield_files") or config.get("forcefield")
+            if not has_pdb or not has_forcefield or config.get("steps") is None:
+                raise ValueError("MD task configuration missing required fields (pdb_file/pdb_data, forcefield_files/forcefield, steps).")
         # Basic validation for DFT tasks (can be expanded)
         elif task_type == "dft":
             if not config.get("dft_params") or not isinstance(config.get("dft_params"), dict):

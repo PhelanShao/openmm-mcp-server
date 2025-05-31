@@ -16,20 +16,40 @@ try:
 except ImportError:
     OPENMM_AVAILABLE = False
     # Mock objects for type hinting and basic structure if OpenMM is not installed
-    # This allows the rest of the code to be parsable.
-    # print("Warning: OpenMM not found. OpenMMEngine will use mock objects.") # Replaced by logger
-    # Initial log before logger is fully set up in __init__
     logging.getLogger(__name__).warning("OpenMM not found during import. OpenMMEngine will use mock objects if instantiated.")
-    class MockSystem: pass
+    
+    # Create mock unit system
+    class MockUnit:
+        kilojoules_per_mole = "kJ/mol"
+        kelvin = "K"
+        picosecond = "ps"
+        nanometer = "nm"
+        def __mul__(self, other): return f"{other} {self}"
+        def __rmul__(self, other): return f"{other} {self}"
+    
+    class MockUnits:
+        kilojoules_per_mole = MockUnit.kilojoules_per_mole
+        kelvin = MockUnit.kelvin
+        picosecond = MockUnit.picosecond
+        nanometer = MockUnit.nanometer
+    
+    unit = MockUnits()
+    
+    class MockSystem:
+        pass
+    
     class MockSimulation:
-        def __init__(self, topology, system, integrator, platform=None): pass
-        def minimizeEnergy(self, tolerance=None, maxIterations=0): pass
-        def step(self, steps: int): pass
+        def __init__(self, topology, system, integrator, platform=None):
+            pass
+        def minimizeEnergy(self, tolerance=None, maxIterations=0):
+            pass
+        def step(self, steps: int):
+            pass
         class MockContext:
             def getState(self, getPositions=False, getVelocities=False, getForces=False, getEnergy=False, getParameters=False, enforcePeriodicBox=False):
                 class MockState:
-                    def getPotentialEnergy(self): return 0.0 * unit.kilojoules_per_mole
-                    def getKineticEnergy(self): return 0.0 * unit.kilojoules_per_mole
+                    def getPotentialEnergy(self): return "0.0 kJ/mol"
+                    def getKineticEnergy(self): return "0.0 kJ/mol"
                     def getPositions(self, asNumpy=False): return []
                     def getVelocities(self, asNumpy=False): return []
                     def getForces(self, asNumpy=False): return []
@@ -38,34 +58,54 @@ except ImportError:
             def setVelocitiesToTemperature(self, temperature, randomSeed=None): pass
         context = MockContext()
         reporters = []
+    
     class MockPDBFile:
-        def __init__(self, file_path_or_content): self.topology = None; self.positions = None
+        def __init__(self, file_path_or_content):
+            self.topology = None
+            self.positions = None
+    
     class MockForceField:
-        def __init__(self, *forcefield_files): pass
-        def createSystem(self, topology, nonbondedMethod=None, nonbondedCutoff=None, constraints=None, rigidWater=True, removeCMMotion=True, hydrogenMass=None, switchDistance=None): return MockSystem()
+        def __init__(self, *forcefield_files):
+            pass
+        def createSystem(self, topology, nonbondedMethod=None, nonbondedCutoff=None, constraints=None, rigidWater=True, removeCMMotion=True, hydrogenMass=None, switchDistance=None):
+            return MockSystem()
+    
     class MockLangevinMiddleIntegrator:
-        def __init__(self, temperature, frictionCoeff, stepSize): pass
+        def __init__(self, temperature, frictionCoeff, stepSize):
+            pass
+    
     class MockPlatform:
         @staticmethod
-        def getPlatformByName(name: str): return MockPlatform()
+        def getPlatformByName(name: str):
+            return MockPlatform()
+    
+    # Create mock modules
+    class MockApp:
+        PDBFile = MockPDBFile
+        ForceField = MockForceField
+        LangevinMiddleIntegrator = MockLangevinMiddleIntegrator
+        Simulation = MockSimulation
+        PME = "PME"
+        NoCutoff = "NoCutoff"
+        HBonds = "HBonds"
+        AllBonds = "AllBonds"
+    
+    class MockMM:
+        Platform = MockPlatform
+        System = MockSystem
+        LangevinMiddleIntegrator = MockLangevinMiddleIntegrator
+    
+    app = MockApp()
+    mm = MockMM()
     class MockDCDReporter:
         def __init__(self, file, reportInterval): pass
+    
     class MockStateDataReporter:
         def __init__(self, file, reportInterval, **kwargs): pass
-
-    # Reassign to mocks if OpenMM is not available
-    mm = locals().get('mm', object()) # type: ignore
-    app = locals().get('app', object()) # type: ignore
-    unit = locals().get('unit', object()) # type: ignore
-    if not OPENMM_AVAILABLE:
-        app.PDBFile = MockPDBFile # type: ignore
-        app.ForceField = MockForceField # type: ignore
-        mm.LangevinMiddleIntegrator = MockLangevinMiddleIntegrator # type: ignore
-        mm.Platform = MockPlatform # type: ignore
-        app.DCDReporter = MockDCDReporter # type: ignore
-        app.StateDataReporter = MockStateDataReporter # type: ignore
-        mm.System = MockSystem # type: ignore
-        mm.Simulation = MockSimulation # type: ignore
+    
+    # Add reporters to mock app
+    app.DCDReporter = MockDCDReporter
+    app.StateDataReporter = MockStateDataReporter
 
 
 class OpenMMEngine:

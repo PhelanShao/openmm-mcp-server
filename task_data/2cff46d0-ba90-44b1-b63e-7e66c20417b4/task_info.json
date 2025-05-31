@@ -1,0 +1,27 @@
+{
+    "task_id": "2cff46d0-ba90-44b1-b63e-7e66c20417b4",
+    "config": {
+        "task_type": "dft",
+        "input_structure": "H2O molecule\n1.0\n10.0 0.0 0.0\n0.0 10.0 0.0\n0.0 0.0 10.0\nO H\n1 2\nCartesian\n0.0 0.0 0.0\n0.757 0.586 0.0\n-0.757 0.586 0.0\n",
+        "dft_params": {
+            "calculation": "scf",
+            "ecutwfc": 50,
+            "kpoints": [
+                1,
+                1,
+                1
+            ],
+            "smearing": "gaussian",
+            "degauss": 0.01
+        },
+        "compute_resources": {}
+    },
+    "task_type": "dft",
+    "status": "pending",
+    "progress": {
+        "current_step": 0,
+        "total_steps": 1
+    },
+    "results": null,
+    "error_message": null
+}
