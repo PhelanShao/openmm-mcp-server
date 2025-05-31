@@ -237,7 +237,7 @@ If you encounter any issues:
 
 #### 📄 License
 
-See LICENSE file for details.
+This project is licensed under the GNU General Public License v3.0.
 
 ---
 

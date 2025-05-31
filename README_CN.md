@@ -243,6 +243,10 @@ openmm-mcp-server/
 └── task_data/                # 任务数据目录（自动创建）
 ```
 
+## 📄 许可证
+
+本项目使用GNU General Public License v3.0开源协议。详情请参见LICENSE文件。
+
 ## 🔍 故障排除
 
 ### 常见问题
