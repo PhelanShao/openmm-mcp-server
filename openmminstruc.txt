@@ -1,0 +1,1510 @@
+TITLE: Installing OpenMM with Pip
+DESCRIPTION: This command installs the core OpenMM library using the `pip` package manager. This installation includes the OpenCL, CPU, and Reference simulation platforms by default.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/01_getting_started.rst#_snippet_2
+
+LANGUAGE: Shell
+CODE:
+```
+pip install openmm
+```
+
+----------------------------------------
+
+TITLE: Importing OpenMM Core and Unit Modules in Python
+DESCRIPTION: This snippet demonstrates the standard way to import the core OpenMM library as 'mm' and the OpenMM unit system as 'unit'. These imports are foundational for any OpenMM Python application, providing access to simulation components and unit-aware quantity handling.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_25
+
+LANGUAGE: Python
+CODE:
+```
+import openmm as mm
+import openmm.unit as unit
+```
+
+----------------------------------------
+
+TITLE: Complete OpenMM Simulation Setup with Gromacs Files (Python)
+DESCRIPTION: This comprehensive script demonstrates setting up and running a molecular dynamics simulation in OpenMM using Gromacs input files. It loads coordinates from `input.gro` and topology/parameters from `input.top`, specifying periodic box vectors and the `includeDir` for Gromacs force field definitions. The system is created with PME and HBond constraints, an integrator is defined, energy is minimized, and reporters are set up to save trajectory and state data before running 10,000 simulation steps.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_19
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.app import *
+from openmm import *
+from openmm.unit import *
+from sys import stdout
+
+gro = GromacsGroFile('input.gro')
+top = GromacsTopFile('input.top', periodicBoxVectors=gro.getPeriodicBoxVectors(),
+        includeDir='/usr/local/gromacs/share/gromacs/top')
+system = top.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+        constraints=HBonds)
+integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+simulation = Simulation(top.topology, system, integrator)
+simulation.context.setPositions(gro.positions)
+simulation.minimizeEnergy()
+simulation.reporters.append(DCDReporter('output.dcd', 1000))
+simulation.reporters.append(StateDataReporter(stdout, 1000, step=True,
+        potentialEnergy=True, temperature=True))
+simulation.step(10000)
+```
+
+----------------------------------------
+
+TITLE: Loading a PDB File into OpenMM
+DESCRIPTION: This Python line loads a molecular structure from an `input.pdb` file into an OpenMM `PDBFile` object. The `PDBFile` object encapsulates the molecular topology and atom positions, which are fundamental for defining the system. The filename can be customized, and OpenMM also supports the PDBx/mmCIF format via `PDBxFile`.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_4
+
+LANGUAGE: Python
+CODE:
+```
+pdb = PDBFile('input.pdb')
+```
+
+----------------------------------------
+
+TITLE: Installing OpenMM with Conda
+DESCRIPTION: This command installs the OpenMM library using the `conda` package manager from the `conda-forge` channel. It automatically selects a version compatible with the latest CUDA drivers if available (conda v4.8.4+).
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/01_getting_started.rst#_snippet_0
+
+LANGUAGE: Shell
+CODE:
+```
+conda install -c conda-forge openmm
+```
+
+----------------------------------------
+
+TITLE: Creating OpenMM System from Force Field and Topology
+DESCRIPTION: This Python line creates a `System` object, which is a complete mathematical description of the molecular system, by combining the loaded force field with the molecular topology from the PDB file. It configures nonbonded interactions using Particle Mesh Ewald (PME) with a 1 nm cutoff and applies constraints to hydrogen bonds, establishing the physical model for the simulation.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_6
+
+LANGUAGE: Python
+CODE:
+```
+system = forcefield.createSystem(pdb.topology, nonbondedMethod=PME,
+            nonbondedCutoff=1*nanometer, constraints=HBonds)
+```
+
+----------------------------------------
+
+TITLE: Attaching Units to Python Containers and NumPy Arrays - Python
+DESCRIPTION: This snippet demonstrates how to attach units to various Python containers, including `Vec3` objects, nested lists, and NumPy arrays, using the `openmm.unit` module. It shows how quantities are created by multiplying numerical containers with unit objects and how to convert them to different units using `in_units_of` or division. The `openmm.unit` module overloads `__setitem__` and `__getitem__` to manage quantities within these containers.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_42
+
+LANGUAGE: Python
+CODE:
+```
+>>> a = Vec3(1,2,3) * nanometers
+>>> print(a)
+(1, 2, 3) nm
+>>> print(a.in_units_of(angstroms))
+(10.0, 20.0, 30.0) A
+
+>>> s2 = [[1,2,3],[4,5,6]] * centimeter
+>>> print(s2)
+[[1, 2, 3], [4, 5, 6]] cm
+>>> print(s2/millimeter)
+[[10.0, 20.0, 30.0], [40.0, 50.0, 60.0]]
+
+>>> import numpy
+>>> a = numpy.array([1,2,3]) * centimeter
+>>> print(a)
+[1 2 3] cm
+>>> print(a/millimeter)
+[ 10.  20.  30.]
+```
+
+----------------------------------------
+
+TITLE: Initializing SystemGenerator and Creating System in OpenMM
+DESCRIPTION: This snippet demonstrates how to initialize the `SystemGenerator` in OpenMM Forcefields to manage biopolymer and small molecule force fields. It shows how to define force field keyword arguments, specify standard and small molecule force fields (GAFF), and then create an OpenMM `System` object from either an `OpenMM Topology` or a combination of `OpenMM Topology` and `OpenFF Molecule` objects.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_34
+
+LANGUAGE: Python
+CODE:
+```
+# Define the keyword arguments to feed to ForceField
+from openmm import unit, app
+forcefield_kwargs = { 'constraints' : app.HBonds, 'rigidWater' : True, 'removeCMMotion' : False, 'hydrogenMass' : 4*unit.amu }
+# Initialize a SystemGenerator using GAFF
+from openmmforcefields.generators import SystemGenerator
+system_generator = SystemGenerator(forcefields=['amber/ff14SB.xml', 'amber/tip3p_standard.xml'], small_molecule_forcefield='gaff-2.11', forcefield_kwargs=forcefield_kwargs, cache='db.json')
+# Create an OpenMM System from an OpenMM Topology object
+system = system_generator.create_system(openmm_topology)
+# Alternatively, create an OpenMM System from an OpenMM Topology object and a list of OpenFF Molecule objects
+molecules = Molecule.from_file('molecules.sdf', file_format='sdf')
+system = system_generator.create_system(openmm_topology, molecules=molecules)
+```
+
+----------------------------------------
+
+TITLE: Installing OpenMM with CUDA Platform via Pip
+DESCRIPTION: This `pip` command installs OpenMM along with the CUDA platform, specifically compiled for CUDA 12. This is recommended for users with NVIDIA GPUs to enable GPU acceleration for simulations.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/01_getting_started.rst#_snippet_3
+
+LANGUAGE: Shell
+CODE:
+```
+pip install openmm[cuda12]
+```
+
+----------------------------------------
+
+TITLE: Simulating with AMBER Files in OpenMM Python
+DESCRIPTION: This comprehensive script demonstrates setting up and running an OpenMM simulation using AMBER `prmtop` and `inpcrd` files. It imports necessary OpenMM modules, loads AMBER files, creates a system with PME nonbonded method and HBonds constraints, initializes a Langevin integrator, and then runs the simulation with energy minimization and DCD reporting.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_14
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.app import *
+from openmm import *
+from openmm.unit import *
+from sys import stdout
+
+inpcrd = AmberInpcrdFile('input.inpcrd')
+prmtop = AmberPrmtopFile('input.prmtop', periodicBoxVectors=inpcrd.boxVectors)
+system = prmtop.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+        constraints=HBonds)
+integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+simulation = Simulation(prmtop.topology, system, integrator)
+simulation.context.setPositions(inpcrd.positions)
+simulation.minimizeEnergy()
+simulation.reporters.append(DCDReporter('output.dcd', 1000))
+```
+
+----------------------------------------
+
+TITLE: Defining Force Field for OpenMM Simulation
+DESCRIPTION: This Python line initializes a `ForceField` object by loading specified XML definition files. In this instance, it loads the Amber19 force field (`amber19-all.xml`) and the TIP3P-FB water model (`amber19/tip3pfb.xml`). The `ForceField` object is critical for parameterizing the molecular system, defining the interactions between atoms.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_5
+
+LANGUAGE: Python
+CODE:
+```
+forcefield = ForceField('amber19-all.xml', 'amber19/tip3pfb.xml')
+```
+
+----------------------------------------
+
+TITLE: Installing OpenMM-PLUMED with Conda
+DESCRIPTION: This command installs the OpenMM-PLUMED package from the conda-forge channel, allowing the integration of PLUMED's collective variable capabilities into OpenMM simulations.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/05_add_on_packages.rst#_snippet_5
+
+LANGUAGE: Bash
+CODE:
+```
+conda install -c conda-forge openmm-plumed
+```
+
+----------------------------------------
+
+TITLE: Running a Complete OpenMM Simulation Script
+DESCRIPTION: This comprehensive Python script demonstrates a full OpenMM simulation workflow. It loads a biomolecular system from a PDB file, parameterizes it with Amber19 and TIP3P-FB, performs energy minimization, runs a Langevin dynamics simulation for 10,000 steps, and saves trajectory data to a DCD file while reporting state data to standard output.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_0
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.app import *
+from openmm import *
+from openmm.unit import *
+from sys import stdout
+
+pdb = PDBFile('input.pdb')
+forcefield = ForceField('amber19-all.xml', 'amber19/tip3pfb.xml')
+system = forcefield.createSystem(pdb.topology, nonbondedMethod=PME,
+        nonbondedCutoff=1*nanometer, constraints=HBonds)
+integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+simulation = Simulation(pdb.topology, system, integrator)
+simulation.context.setPositions(pdb.positions)
+simulation.minimizeEnergy()
+simulation.reporters.append(DCDReporter('output.dcd', 1000))
+simulation.reporters.append(StateDataReporter(stdout, 1000, step=True,
+                potentialEnergy=True, temperature=True))
+simulation.step(10000)
+```
+
+----------------------------------------
+
+TITLE: Retrieving Simulation State and Data in OpenMM (C++)
+DESCRIPTION: This snippet demonstrates how to retrieve simulation state information from an OpenMM Context. It shows how to specify which data to retrieve using an infoMask (positions, velocities, energy), access the time, copy positions while converting units from nanometers to Angstroms, and calculate total energy by converting from kilojoules to kilocalories. It depends on an initialized omm->context and OpenMM unit constants.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_27
+
+LANGUAGE: C++
+CODE:
+```
+int infoMask = 0;
+infoMask = OpenMM::State::Positions;
+if (wantEnergy) {
+   infoMask += OpenMM::State::Velocities; // for kinetic energy (cheap)
+   infoMask += OpenMM::State::Energy;     // for pot. energy (more expensive)
+}
+// Forces are also available (and cheap).
+
+const OpenMM::State state = omm->context->getState(infoMask);
+timeInPs = state.getTime(); // OpenMM time is in ps already
+
+// Copy OpenMM positions into atoms array and change units from nm to Angstroms.
+const std::vector<Vec3>& positionsInNm = state.getPositions();
+for (int i=0; i < (int)positionsInNm.size(); ++i)
+    for (int j=0; j < 3; ++j)
+         atoms[i].posInAng[j] = positionsInNm[i][j] * OpenMM::AngstromsPerNm;
+
+// If energy has been requested, obtain it and convert from kJ to kcal.
+energyInKcal = 0;
+if (wantEnergy)
+   energyInKcal = (state.getPotentialEnergy() + state.getKineticEnergy())
+                  * OpenMM::KcalPerKJ;
+```
+
+----------------------------------------
+
+TITLE: Performing Energy Minimization in OpenMM Python
+DESCRIPTION: This snippet performs a local energy minimization, which is a recommended initial step to relax potentially high forces from the input coordinates. This helps prevent instabilities at the start of the molecular dynamics simulation.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_10
+
+LANGUAGE: Python
+CODE:
+```
+simulation.minimizeEnergy()
+```
+
+----------------------------------------
+
+TITLE: Performing Energy Minimization with Tolerance and Max Iterations (Python)
+DESCRIPTION: This snippet combines both `tolerance` and `maxIterations` parameters for energy minimization. It ensures the minimization stops either when the energy converges to 0.1 kilojoule/mole/nanometer or after 500 iterations, whichever comes first, offering precise control over the process.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_62
+
+LANGUAGE: Python
+CODE:
+```
+simulation.minimizeEnergy(tolerance=0.1*kilojoule/mole/nanometer, maxIterations=500)
+```
+
+----------------------------------------
+
+TITLE: Minimizing Energy and Saving PDB in OpenMM Python
+DESCRIPTION: This Python snippet demonstrates how to perform energy minimization on an OpenMM simulation object and then save the resulting atomic positions to a PDB file. It's a crucial step for relaxing initial structures or after certain simulation phases. The `simulation` object is expected to be an initialized OpenMM Simulation instance, and `PDBFile` is assumed to be imported from `simtk.openmm.app`.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_16
+
+LANGUAGE: python
+CODE:
+```
+simulation.minimizeEnergy(maxIterations=100)
+print('Saving...')
+positions = simulation.context.getState(positions=True).getPositions()
+PDBFile.writeFile(simulation.topology, positions, open('output.pdb', 'w'))
+print('Done')
+```
+
+----------------------------------------
+
+TITLE: Initializing OpenMM Simulation Object in Python
+DESCRIPTION: This code creates a `Simulation` object, combining the molecular topology, system, and integrator to manage the simulation process. The `Simulation` object handles tasks such as advancing time and writing output, serving as the central orchestrator for the simulation.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_8
+
+LANGUAGE: Python
+CODE:
+```
+simulation = Simulation(pdb.topology, system, integrator)
+```
+
+----------------------------------------
+
+TITLE: Complete System Preparation Workflow with OpenMM Modeller (Python)
+DESCRIPTION: This comprehensive example demonstrates a typical workflow for preparing a molecular system using OpenMM. It includes loading a PDB file, adding missing hydrogens, solvating the system with a TIP3P water model and 1nm padding, and setting up an energy minimization simulation. It initializes `Modeller`, creates a `System` from the `ForceField`, and prepares a `Simulation` object.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_15
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.app import *
+from openmm import *
+from openmm.unit import *
+
+print('Loading...')
+pdb = PDBFile('input.pdb')
+forcefield = ForceField('amber99sb.xml', 'tip3p.xml')
+modeller = Modeller(pdb.topology, pdb.positions)
+print('Adding hydrogens...')
+modeller.addHydrogens(forcefield)
+print('Adding solvent...')
+modeller.addSolvent(forcefield, model='tip3p', padding=1*nanometer)
+print('Minimizing...')
+system = forcefield.createSystem(modeller.topology, nonbondedMethod=PME)
+integrator = VerletIntegrator(0.001*picoseconds)
+simulation = Simulation(modeller.topology, system, integrator)
+simulation.context.setPositions(modeller.positions)
+```
+
+----------------------------------------
+
+TITLE: Configuring Simulation Reporters and Running Steps (Python)
+DESCRIPTION: This snippet configures a `StateDataReporter` to output simulation data (step, potential energy, temperature) to standard output every 1000 steps. Following the reporter setup, the simulation is advanced by 10,000 steps. This is a common pattern for monitoring and progressing molecular dynamics simulations in OpenMM.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_15
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(StateDataReporter(stdout, 1000, step=True,
+        potentialEnergy=True, temperature=True))
+simulation.step(10000)
+```
+
+----------------------------------------
+
+TITLE: Querying State with getState() in OpenMM (Python)
+DESCRIPTION: Demonstrates the Pythonic usage of the `getState()` method in the `Context` class, where state variables are requested using keyword arguments (e.g., `energy=True`, `force=False`) instead of C++ references.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_23
+
+LANGUAGE: Python
+CODE:
+```
+myContext.getState(energy=True, force=False, …)
+```
+
+----------------------------------------
+
+TITLE: Installing OpenMMTools with Conda
+DESCRIPTION: This command installs the OpenMMTools package from the conda-forge channel, which provides a collection of Python utilities for OpenMM, including additional integrators, MCMC frameworks, and enhanced sampling methods.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/05_add_on_packages.rst#_snippet_4
+
+LANGUAGE: Bash
+CODE:
+```
+conda install -c conda-forge openmmtools
+```
+
+----------------------------------------
+
+TITLE: Performing Basic Energy Minimization (Python)
+DESCRIPTION: This simple line of code initiates a local energy minimization on the simulation system. It uses default parameters for convergence tolerance and maximum iterations, making it suitable for most common use cases.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_59
+
+LANGUAGE: Python
+CODE:
+```
+simulation.minimizeEnergy()
+```
+
+----------------------------------------
+
+TITLE: Creating OpenMM Context and Platform Selection in C++
+DESCRIPTION: Initializes an OpenMM Context object, which combines the System and Integrator to manage the simulation's state. By not explicitly specifying a platform, the Context automatically selects the best available platform for execution, which is then printed for debugging and informational purposes.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_13
+
+LANGUAGE: C++
+CODE:
+```
+// Let OpenMM Context choose best platform.
+OpenMM::Context context(system, integrator);
+```
+
+----------------------------------------
+
+TITLE: Initializing CHARMM36 Force Field in OpenMM (Python)
+DESCRIPTION: This snippet demonstrates how to initialize the CHARMM36 force field in OpenMM using the ForceField class. It loads the main CHARMM36 parameters along with the default CHARMM water model and compatible ions, which are bundled in charmm36_2024.xml and charmm36/water.xml respectively. This setup is suitable for most simulations requiring the CHARMM36 force field.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_27
+
+LANGUAGE: Python
+CODE:
+```
+forcefield = ForceField('charmm36_2024.xml', 'charmm36/water.xml')
+```
+
+----------------------------------------
+
+TITLE: Configuring Nonbonded Interactions in OpenMM System Creation
+DESCRIPTION: This snippet illustrates how to configure nonbonded interactions when creating an OpenMM `System`. It sets the `nonbondedMethod` to PME (Particle Mesh Ewald) and defines a `nonbondedCutoff` of 1 nanometer, which are crucial for handling long-range electrostatic interactions.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_38
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer)
+```
+
+----------------------------------------
+
+TITLE: Adding DCD Trajectory Reporter in OpenMM Python
+DESCRIPTION: This code adds a `DCDReporter` to an OpenMM simulation, enabling the saving of trajectory data to a DCD file. The reporter is configured with the output filename ('output.dcd') and the frequency (1000 time steps) at which structures should be written to the file.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_64
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(DCDReporter('output.dcd', 1000))
+```
+
+----------------------------------------
+
+TITLE: Importing OpenMM and System Libraries
+DESCRIPTION: These Python lines import essential modules and classes required for OpenMM simulations. They include `openmm.app` for high-level application functionalities, `openmm` for core simulation components, `openmm.unit` for handling physical units, and `sys.stdout` for standard output operations, forming the standard preamble for OpenMM scripts.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_3
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.app import *
+from openmm import *
+from openmm.unit import *
+from sys import stdout
+```
+
+----------------------------------------
+
+TITLE: Initializing Langevin Middle Integrator (Python)
+DESCRIPTION: This snippet shows how to initialize a LangevinMiddleIntegrator object in OpenMM. It takes three parameters: simulation temperature (300 K), friction coefficient (1 ps⁻¹), and step size (0.004 ps). This integrator is commonly used for molecular dynamics simulations, providing a balance between accuracy and computational efficiency.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_48
+
+LANGUAGE: Python
+CODE:
+```
+integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+```
+
+----------------------------------------
+
+TITLE: Adding State Data Reporter for Energy in OpenMM Python
+DESCRIPTION: This code adds a `StateDataReporter` to an OpenMM simulation to record various simulation properties. It saves data to 'data.csv' every 1000 time steps, including the current time, kinetic energy, and potential energy of the system.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_66
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(StateDataReporter('data.csv', 1000, time=True,
+            kineticEnergy=True, potentialEnergy=True))
+```
+
+----------------------------------------
+
+TITLE: Adding State Data Reporter to OpenMM Simulation in Python
+DESCRIPTION: This snippet appends a `StateDataReporter` to output basic simulation information to the console (`stdout`) every 1000 steps. It reports the current step index, potential energy, and temperature, providing real-time monitoring of the simulation's status.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_12
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(StateDataReporter(stdout, 1000, step=True,
+            potentialEnergy=True, temperature=True))
+```
+
+----------------------------------------
+
+TITLE: Defining CustomTorsionForce in XML
+DESCRIPTION: This XML snippet demonstrates how to add a CustomTorsionForce to an OpenMM System. It defines the energy expression for torsions, declares global and per-torsion parameters, and specifies rules for both proper and improper torsions based on atom classes, including their respective parameter values.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_25
+
+LANGUAGE: xml
+CODE:
+```
+<CustomTorsionForce energy="scale*k*(1+cos(per*theta-phase))">
+ <GlobalParameter name="scale" defaultValue="1"/>
+ <PerTorsionParameter name="k"/>
+ <PerTorsionParameter name="per"/>
+ <PerTorsionParameter name="phase"/>
+ <Proper class1="HC" class2="CT" class3="CT" class4="CT" per="3" phase="0.0" k="0.66944"/>
+ <Proper class1="HC" class2="CT" class3="CT" class4="HC" per="3" phase="0.0" k="0.6276"/>
+ ...
+ <Improper class1="N" class2="C" class3="CT" class4="O" per="2" phase="3.14159265359"
+     k="4.6024"/>
+ <Improper class1="N" class2="C" class3="CT" class4="H" per="2" phase="3.14159265359"
+     k="4.6024"/>
+ ...
+</CustomTorsionForce>
+```
+
+----------------------------------------
+
+TITLE: Initializing and Using OpenMM Modeller (Python)
+DESCRIPTION: This snippet outlines the basic workflow for using the OpenMM Modeller class. It demonstrates how to initialize Modeller with a PDB file's topology and positions, perform subsequent modifications (indicated by comments), and then use the modified topology and positions to create a System and Simulation object.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_0
+
+LANGUAGE: Python
+CODE:
+```
+...
+pdb = PDBFile('input.pdb')
+modeller = Modeller(pdb.topology, pdb.positions)
+# ... Call some modelling functions here ...
+system = forcefield.createSystem(modeller.topology, nonbondedMethod=PME)
+simulation = Simulation(modeller.topology, system, integrator)
+simulation.context.setPositions(modeller.positions)
+```
+
+----------------------------------------
+
+TITLE: Loading OpenMM Force Field with Amber19 and TIP3P-FB (Python)
+DESCRIPTION: This snippet shows how to initialize an OpenMM ForceField object by loading definitions from multiple XML files. It loads the amber19-all.xml file, which is a shortcut for the Amber19 force field components, and amber19/tip3pfb.xml for the TIP3P-FB water model and compatible ions. This is a common way to set up a force field for molecular simulations.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_25
+
+LANGUAGE: Python
+CODE:
+```
+forcefield = ForceField('amber19-all.xml', 'amber19/tip3pfb.xml')
+```
+
+----------------------------------------
+
+TITLE: Loading Simulation Checkpoint in OpenMM (Python)
+DESCRIPTION: This snippet shows how to load a previously saved OpenMM simulation state from a binary checkpoint file. The simulation will resume from the state stored in 'state.chk', provided the hardware and OpenMM version match those used during saving.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_71
+
+LANGUAGE: Python
+CODE:
+```
+simulation.loadCheckpoint('state.chk')
+```
+
+----------------------------------------
+
+TITLE: Registering SMIRNOFF Template Generator in OpenMM
+DESCRIPTION: This Python snippet demonstrates how to create and register a SMIRNOFF template generator for small molecules within an OpenMM `ForceField` object. It uses the `openff.toolkit` to define a molecule from SMILES and `openmmforcefields.generators` to create the SMIRNOFF generator, allowing dynamic parameterization of small molecules with OpenFF force fields.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_32
+
+LANGUAGE: python
+CODE:
+```
+# Create an OpenFF Molecule object for benzene from SMILES
+from openff.toolkit.topology import Molecule
+molecule = Molecule.from_smiles('c1ccccc1')
+# Create the SMIRNOFF template generator with the default installed force field (openff-1.0.0)
+from openmmforcefields.generators import SMIRNOFFTemplateGenerator
+smirnoff = SMIRNOFFTemplateGenerator(molecules=molecule)
+# Create an OpenMM ForceField object with AMBER ff14SB and TIP3P with compatible ions
+from openmm.app import ForceField
+forcefield = ForceField('amber/protein.ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml')
+# Register the SMIRNOFF template generator
+forcefield.registerTemplateGenerator(smirnoff.generator)
+```
+
+----------------------------------------
+
+TITLE: Defining Intermediate Values in OpenMM Custom Expressions
+DESCRIPTION: This example demonstrates how to define and use intermediate variables within a single OpenMM custom expression string. Semicolons are used to delimit the main expression from subsequent intermediate value definitions, allowing for more readable and modular expressions.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/theory/03_custom_forces.rst#_snippet_0
+
+LANGUAGE: OpenMM Expression Language
+CODE:
+```
+a^2+a*b+b^2; a=a1+a2; b=b1+b2
+```
+
+----------------------------------------
+
+TITLE: Registering GAFF Template Generator and System Creation in OpenMM
+DESCRIPTION: This Python example illustrates how to create and register a GAFF template generator for small molecules and then use it to create an OpenMM `System`. It utilizes `openff.toolkit` for molecule definition and `openmmforcefields.generators` for the GAFF generator, enabling on-the-fly parameterization of small molecules using AMBER GAFF with existing protein and water force fields.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_33
+
+LANGUAGE: python
+CODE:
+```
+# Create an OpenFF Molecule object for benzene from SMILES
+from openff.toolkit.topology import Molecule
+molecule = Molecule.from_smiles('c1ccccc1')
+# Create the GAFF template generator
+from openmmforcefields.generators import GAFFTemplateGenerator
+gaff = GAFFTemplateGenerator(molecules=molecule)
+# Create an OpenMM ForceField object with AMBER ff14SB and TIP3P with compatible ions
+from openmm.app import ForceField
+forcefield = ForceField('amber/protein.ff14SB.xml', 'amber/tip3p_standard.xml', 'amber/tip3p_HFE_multivalent.xml')
+# Register the GAFF template generator
+forcefield.registerTemplateGenerator(gaff.generator)
+# You can now parameterize an OpenMM Topology object that contains the specified molecule.
+# forcefield will load the appropriate GAFF parameters when needed, and antechamber
+# will be used to generate small molecule parameters on the fly.
+from openmm.app import PDBFile
+pdbfile = PDBFile('t4-lysozyme-L99A-with-benzene.pdb')
+system = forcefield.createSystem(pdbfile.topology)
+```
+
+----------------------------------------
+
+TITLE: Adding XTC Trajectory Reporter in OpenMM Python
+DESCRIPTION: This snippet demonstrates how to append an `XTCReporter` to an OpenMM simulation, allowing trajectory data to be saved in the XTC format. It specifies 'output.xtc' as the output file and `1000` as the reporting interval in time steps.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_65
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(XTCReporter('output.xtc', 1000))
+```
+
+----------------------------------------
+
+TITLE: Assigning Heavy Hydrogens in System Creation (Python)
+DESCRIPTION: This snippet demonstrates how to increase the mass of hydrogen atoms during system creation using the hydrogenMass parameter. The added mass is subtracted from the bonded heavy atom, maintaining the total mass while slowing down fast hydrogen motions. This technique, often combined with AllBonds constraints, can enable larger integration time steps in simulations.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_47
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(hydrogenMass=4*amu)
+```
+
+----------------------------------------
+
+TITLE: Applying HBonds Constraints to System Creation (Python)
+DESCRIPTION: This snippet demonstrates how to apply HBonds constraints when creating an OpenMM System from a prmtop file. The constraints=HBonds parameter ensures that all bond lengths involving a hydrogen atom are fixed, which allows for a larger integration time step in molecular dynamics simulations. The nonbondedMethod is set to NoCutoff in this example.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_45
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=NoCutoff, constraints=HBonds)
+```
+
+----------------------------------------
+
+TITLE: Saving Full Simulation State to XML in OpenMM Python
+DESCRIPTION: This line of code saves the entire current state of an OpenMM simulation, including positions, velocities, and box dimensions, to an XML file named 'output.xml'. This allows for the exact continuation of the simulation from the saved point, even across different platforms or OpenMM versions.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_68
+
+LANGUAGE: Python
+CODE:
+```
+simulation.saveState('output.xml')
+```
+
+----------------------------------------
+
+TITLE: Constructing Quantities in OpenMM (Python)
+DESCRIPTION: Demonstrates three methods for creating a `Quantity` object: using the multiplication operator with a unit, the explicit `Quantity` constructor, and the verbose `Quantity` constructor with keyword arguments for value and unit.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_31
+
+LANGUAGE: Python
+CODE:
+```
+bond_length = 1.53 * nanometer
+bond_length = Quantity(1.53, nanometer)
+bond_length = Quantity(value=1.53, unit=nanometer)
+```
+
+----------------------------------------
+
+TITLE: Installing OpenMM with Specific CUDA Version via Conda
+DESCRIPTION: This `conda` command installs OpenMM, specifically targeting a particular CUDA version (e.g., CUDA 12). This is useful when you need OpenMM to be compiled against a specific CUDA release due to binary compatibility requirements.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/01_getting_started.rst#_snippet_1
+
+LANGUAGE: Shell
+CODE:
+```
+conda install -c conda-forge openmm cuda-version=12
+```
+
+----------------------------------------
+
+TITLE: Configuring Multi-GPU Usage with CUDA Platform (C)
+DESCRIPTION: This snippet demonstrates how to configure the OpenMM CUDA platform to utilize multiple GPUs for a simulation. By setting the 'DeviceIndex' property to a comma-separated string of GPU indices (e.g., "0,1"), OpenMM will distribute the simulation workload across the specified devices, enabling parallel processing. This property is crucial for leveraging the computational power of multiple GPUs.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/04_platform_specifics.rst#_snippet_2
+
+LANGUAGE: C
+CODE:
+```
+properties["DeviceIndex"] = "0,1";
+```
+
+----------------------------------------
+
+TITLE: Creating System and Running Simulation in OpenMM (C)
+DESCRIPTION: This C code snippet demonstrates the basic steps to set up and run a molecular simulation using OpenMM. It involves initializing a System, adding various Force objects like HarmonicBondForce and HarmonicAngleForce, configuring a LangevinMiddleIntegrator, and then creating a Context to manage the simulation state and advance it through time.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/01_introduction.rst#_snippet_0
+
+LANGUAGE: c
+CODE:
+```
+System system;
+    for (int i = 0; i < numParticles; ++i)
+        system.addParticle(particle[i].mass);
+    HarmonicBondForce* bonds = new HarmonicBondForce();
+    system.addForce(bonds);
+    for (int i = 0; i < numBonds; ++i)
+        bonds->addBond(bond[i].particle1, bond[i].particle2,
+            bond[i].length, bond[i].k);
+    HarmonicAngleForce* angles = new HarmonicAngleForce();
+    system.addForce(angles);
+    for (int i = 0; i < numAngles; ++i)
+        angles->addAngle(angle[i].particle1, angle[i].particle2,
+            angle[i].particle3, angle[i].angle, angle[i].k);
+    // ...create and initialize other force field terms in the same way
+    LangevinMiddleIntegrator integrator(temperature, friction, stepSize);
+    Context context(system, integrator);
+    context.setPositions(initialPositions);
+    context.setVelocities(initialVelocities);
+    integrator.step(10000);
+```
+
+----------------------------------------
+
+TITLE: Configuring OpenMM Simulation with CUDA Platform Properties (Python)
+DESCRIPTION: This snippet demonstrates how to configure an OpenMM Simulation object to utilize specific platform properties. It sets the CUDA platform, specifies DeviceIndex to parallelize work across two GPUs (0 and 1), and sets Precision to double for all computations. This ensures high-precision calculations distributed across multiple CUDA devices.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_24
+
+LANGUAGE: Python
+CODE:
+```
+platform = Platform.getPlatform('CUDA')
+properties = {'DeviceIndex': '0,1', 'Precision': 'double'}
+simulation = Simulation(prmtop.topology, system, integrator, platform, properties)
+```
+
+----------------------------------------
+
+TITLE: Creating Langevin Integrator in OpenMM Python
+DESCRIPTION: This snippet initializes a `LangevinMiddleIntegrator` for advancing equations of motion in OpenMM. It sets the simulation temperature to 300 K, a friction coefficient of 1 ps⁻¹, and a step size of 0.004 ps, crucial parameters for Langevin dynamics. Other integration methods like `VerletIntegrator` are available for different simulation types.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_7
+
+LANGUAGE: Python
+CODE:
+```
+integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+```
+
+----------------------------------------
+
+TITLE: Adding CheckpointReporter to OpenMM Simulation (Python)
+DESCRIPTION: This snippet demonstrates how to add OpenMM's built-in CheckpointReporter to a simulation. The reporter automatically saves the simulation state to 'checkpnt.chk' every 5,000 steps, overwriting the previous checkpoint, which is useful for recovering from unexpected failures.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_72
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(CheckpointReporter('checkpnt.chk', 5000))
+```
+
+----------------------------------------
+
+TITLE: Converting Quantities to Different Units (Python)
+DESCRIPTION: Explains how to use the `Quantity.in_units_of()` method to convert a `Quantity` to a new `Quantity` expressed in a different unit, such as converting nanoseconds to fortnights, while maintaining dimensional consistency.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_40
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.unit import nanosecond, fortnight
+x = (175000*nanosecond).in_units_of(fortnight)
+```
+
+----------------------------------------
+
+TITLE: Adding Bond Constraints to OpenMM System (C++)
+DESCRIPTION: This code iterates through a list of bonds to add constraints to the OpenMM System if UseConstraints is enabled and the bond type canConstrain. It adds a constraint between two atoms with a specified nominal length, converting from Angstroms to nanometers. This is used to fix the distance between atoms, reducing degrees of freedom.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_31
+
+LANGUAGE: C++
+CODE:
+```
+std::vector< std::pair<int,int> > bondPairs;
+for (int i=0; bonds[i].type != EndOfList; ++i) {
+    const int*		atom = bonds[i].atoms;
+    const BondType&	bond = bondType[bonds[i].type];
+
+    if (UseConstraints && bond.canConstrain) {
+        system.addConstraint(atom[0], atom[1],
+                    bond.nominalLengthInAngstroms * OpenMM::NmPerAngstrom);
+    }
+```
+
+----------------------------------------
+
+TITLE: Adding Harmonic Bond Angle Terms in OpenMM C++
+DESCRIPTION: This loop iterates through defined angle types to add harmonic bond angle terms to the bondBend force. It converts nominal angles from degrees to radians and stiffness from kcal/radian^2 to kJ/radian^2, applying a factor of 2 to the stiffness as noted.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_35
+
+LANGUAGE: C++
+CODE:
+```
+for (int i=0; angles[i].type != EndOfList; ++i) {
+         const int*       atom  = angles[i].atoms;
+         const AngleType& angle = angleType[angles[i].type];
+
+    // See note under bond stretch above regarding the factor of 2 here.
+    bondBend.addAngle(atom[0],atom[1],atom[2],
+    angle.nominalAngleInDegrees     * OpenMM::RadiansPerDegree,
+    angle.stiffnessInKcalPerRadian2 * 2 *
+    OpenMM::KJPerKcal);
+    }
+```
+
+----------------------------------------
+
+TITLE: Adding Particles to OpenMM System with Unit Conversion in C++
+DESCRIPTION: This code iterates through a collection of atom information, adding each particle to the OpenMM System and configuring its properties for the `NonbondedForce` and `GBSAOBCForce`. It explicitly demonstrates the critical unit conversions from angstroms and kilocalories (used by the existing MD code) to OpenMM's native nanometers and kilojoules, utilizing OpenMM's provided conversion constants. Initial positions are also converted and stored for later use.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_24
+
+LANGUAGE: C++
+CODE:
+```
+// Specify the atoms and their properties:
+//  (1) System needs to know the masses.
+//  (2) NonbondedForce needs charges,van der Waals properties(in MD units!).
+//  (3) GBSA needs charge, radius, and scale factor.
+//  (4) Collect default positions for initializing the simulation later.
+std::vector<Vec3> initialPosInNm;
+for (int n=0; *atoms[n].pdb; ++n) {
+         const MyAtomInfo& atom = atoms[n];
+
+         omm->system->addParticle(atom.mass);
+
+         nonbond->addParticle(atom.charge,
+                             atom.vdwRadiusInAng * OpenMM::NmPerAngstrom
+                                                 * OpenMM::SigmaPerVdwRadius,
+                             atom.vdwEnergyInKcal * OpenMM::KJPerKcal);
+
+         gbsa->addParticle(atom.charge,
+                           atom.gbsaRadiusInAng * OpenMM::NmPerAngstrom,
+                           atom.gbsaScaleFactor);
+
+         // Convert the initial position to nm and append to the array.
+         const Vec3 posInNm(atom.initPosInAng[0] * OpenMM::NmPerAngstrom,
+                      atom.initPosInAng[1] * OpenMM::NmPerAngstrom,
+                      atom.initPosInAng[2] * OpenMM::NmPerAngstrom);
+         initialPosInNm.push_back(posInNm);
+```
+
+----------------------------------------
+
+TITLE: Saving Simulation Checkpoint in OpenMM (Python)
+DESCRIPTION: This snippet demonstrates how to save the current state of an OpenMM simulation to a binary checkpoint file. This allows for restarting the simulation from a specific point, but requires the same hardware and OpenMM version for loading. The file 'state.chk' will contain the saved state.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_70
+
+LANGUAGE: Python
+CODE:
+```
+simulation.saveCheckpoint('state.chk')
+```
+
+----------------------------------------
+
+TITLE: Registering a Residue Template Generator with OpenMM ForceField (Python)
+DESCRIPTION: This snippet demonstrates how to register a custom residue template generator function with an existing `openmm.app.ForceField` object. By calling the `registerTemplateGenerator` method, the `ForceField` can use the provided generator to create new residue templates or add atom types and parameters for molecules not natively supported.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_42
+
+LANGUAGE: Python
+CODE:
+```
+forcefield.registerTemplateGenerator(generator)
+```
+
+----------------------------------------
+
+TITLE: Defining Custom ForceReporter Class in OpenMM (Python)
+DESCRIPTION: This Python class, `ForceReporter`, demonstrates how to create a custom reporter for OpenMM simulations. It extends the base reporter functionality to output forces to a specified file at regular intervals. The `describeNextReport` method informs the simulation about the next report time and required data (forces), while the `report` method retrieves and writes the forces to the output file in a simple text format.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/04_advanced_sim_examples.rst#_snippet_3
+
+LANGUAGE: Python
+CODE:
+```
+class ForceReporter(object):
+    def __init__(self, file, reportInterval):
+        self._out = open(file, 'w')
+        self._reportInterval = reportInterval
+
+    def __del__(self):
+        self._out.close()
+
+    def describeNextReport(self, simulation):
+        steps = self._reportInterval - simulation.currentStep%self._reportInterval
+        return = {'steps': steps, 'periodic': None, 'include':['forces']}
+
+    def report(self, simulation, state):
+        forces = state.getForces().value_in_unit(kilojoules/mole/nanometer)
+        for f in forces:
+            self._out.write('%g %g %g\n' % (f[0], f[1], f[2]))
+```
+
+----------------------------------------
+
+TITLE: Importing Common Units from OpenMM Unit Module in Python
+DESCRIPTION: This code shows how to directly import specific common unit constants like 'nanometer', 'angstrom', and 'dalton' from the `openmm.unit` module. This provides convenient access to predefined units for creating unit-aware quantities.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_28
+
+LANGUAGE: Python
+CODE:
+```
+from openmm.unit import nanometer, angstrom, dalton
+```
+
+----------------------------------------
+
+TITLE: Efficient Batch Unit Conversion - Python
+DESCRIPTION: This snippet demonstrates a more efficient way to convert a collection of quantities to a different unit. By calling `value_in_unit(angstrom)` directly on the `state.getPositions()` collection, the entire list is converted in a single, optimized operation. This method is preferred for performance reasons, especially with large datasets, as it avoids the overhead of individual element conversions.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_44
+
+LANGUAGE: Python
+CODE:
+```
+for v in state.getPositions().value_in_unit(angstrom):
+    print(v)
+```
+
+----------------------------------------
+
+TITLE: Creating OpenMM System and NonbondedForce with Units in Python
+DESCRIPTION: This code illustrates the creation of an OpenMM System and a NonbondedForce. It sets the nonbonded method to 'CutoffNonPeriodic' and defines a cutoff distance of 1.2 nanometers using the explicit unit system, then adds the force to the system. This shows how to build basic simulation components with unit-aware parameters.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/05_languages_not_cpp.rst#_snippet_26
+
+LANGUAGE: Python
+CODE:
+```
+system = mm.System()
+nb = mm.NonbondedForce()
+nb.setNonbondedMethod(mm.NonbondedForce.CutoffNonPeriodic)
+nb.setCutoffDistance(1.2*unit.nanometer)
+system.addForce(nb)
+```
+
+----------------------------------------
+
+TITLE: Configuring PME with Error Tolerance in OpenMM Python
+DESCRIPTION: This snippet demonstrates how to create an OpenMM system using the Particle Mesh Ewald (PME) nonbonded method. It specifies a nonbonded cutoff distance and an ewaldErrorTolerance to control the accuracy of the Ewald summation, which defaults to 0.0005 if not provided.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_39
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+            ewaldErrorTolerance=0.00001)
+```
+
+----------------------------------------
+
+TITLE: Defining Simulation Parameters and Atom Data in C
+DESCRIPTION: This C code snippet defines static constants for molecular dynamics simulation parameters such as temperature, friction, dielectric constants, and integration step sizes. It also declares a `MyAtomInfo` struct and initializes an array of `atoms` with PDB names, mass, charge, Van der Waals parameters, GBSA radii, and initial positions. This data represents a simplified model of information typically available from an existing MD code, used to demonstrate OpenMM integration.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_19
+
+LANGUAGE: C
+CODE:
+```
+// -----------------------------------------------------------------
+//                   MODELING AND SIMULATION PARAMETERS
+// -----------------------------------------------------------------
+static const double Temperature         = 300;     // Kelvins
+static const double FrictionInPerPs     = 91.;     // collisions per picosecond
+static const double SolventDielectric   = 80.;     // typical for water
+static const double SoluteDielectric    = 2.;      // typical for protein
+
+static const double StepSizeInFs        = 4;       // integration step size (fs)
+static const double ReportIntervalInFs  = 50;      // how often to issue PDB frame (fs)
+static const double SimulationTimeInPs  = 100;     // total simulation time (ps)
+
+// Decide whether to request energy calculations.
+static const bool   WantEnergy          = true;
+
+
+// -----------------------------------------------------------------
+//                          ATOM AND FORCE FIELD DATA
+// -----------------------------------------------------------------
+// This is not part of OpenMM; just a struct we can use to collect atom
+// parameters for this example. Normally atom parameters would come from the
+// force field's parameterization file. We're going to use data in Angstrom and
+// Kilocalorie units and show how to safely convert to OpenMM's internal unit
+// system which uses nanometers and kilojoules.
+static struct MyAtomInfo {
+    const char* pdb;
+    double      mass, charge, vdwRadiusInAng, vdwEnergyInKcal,
+                gbsaRadiusInAng, gbsaScaleFactor;
+    double      initPosInAng[3];
+    double      posInAng[3]; // leave room for runtime state info
+} atoms[] = {
+// pdb   mass  charge  vdwRad vdwEnergy   gbsaRad gbsaScale  initPos
+{" NA ", 22.99,  1,    1.8680, 0.00277,    1.992,   0.8,     8, 0,  0},
+{" CL ", 35.45, -1,    2.4700, 0.1000,     1.735,   0.8,    -8, 0,  0},
+{" NA ", 22.99,  1,    1.8680, 0.00277,    1.992,   0.8,     0, 9,  0},
+{" CL ", 35.45, -1,    2.4700, 0.1000,     1.735,   0.8,     0,-9,  0},
+{" NA ", 22.99,  1,    1.8680, 0.00277,    1.992,   0.8,     0, 0,-10},
+{" CL ", 35.45, -1,    2.4700, 0.1000,     1.735,   0.8,     0, 0, 10},
+{""} // end of list
+};
+```
+
+----------------------------------------
+
+TITLE: Setting Initial Positions for OpenMM Simulation in Python
+DESCRIPTION: This line sets the initial atomic positions for the simulation using coordinates loaded from a PDB file. Providing accurate starting positions is essential for the simulation's initial state.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_9
+
+LANGUAGE: Python
+CODE:
+```
+simulation.context.setPositions(pdb.positions)
+```
+
+----------------------------------------
+
+TITLE: Defining a Tabulated Continuous 1D Function in OpenMM XML
+DESCRIPTION: This XML snippet demonstrates how to define a tabulated function within OpenMM's custom forces, such as `CustomNonbondedForce` or `CustomGBForce`. The `<Function>` tag specifies the function's `name`, `type` (e.g., `Continuous1D`), and the `min`/`max` range for its input. The numerical values provided within the tag represent the function's output at evenly spaced intervals across the defined range, allowing for complex, non-analytical functions to be used in simulations.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_33
+
+LANGUAGE: XML
+CODE:
+```
+<Function name="myfn" type="Continuous1D" min="-5" max="5">
+0.983674857694 -0.980096396266 -0.975743130031 -0.970451936613 -0.964027580076
+-0.956237458128 -0.946806012846 -0.935409070603 -0.921668554406 -0.905148253645
+-0.885351648202 -0.861723159313 -0.833654607012 -0.800499021761 -0.761594155956
+-0.716297870199 -0.664036770268 -0.604367777117 -0.537049566998 -0.46211715726
+-0.379948962255 -0.291312612452 -0.197375320225 -0.099667994625 0.0
+0.099667994625 0.197375320225 0.291312612452 0.379948962255 0.46211715726
+</Function>
+```
+
+----------------------------------------
+
+TITLE: Configuring Implicit Solvent Dielectrics in OpenMM (Python)
+DESCRIPTION: This snippet demonstrates how to set the solute and solvent dielectric constants when creating a system with an implicit solvent model using OpenMM's `forcefield.createSystem` method. It allows for custom dielectric values instead of the default 1.0 (solute) and 78.5 (solvent), influencing the electrostatic interactions within the simulation.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_29
+
+LANGUAGE: Python
+CODE:
+```
+system = forcefield.createSystem(topology, soluteDielectric=1.0, solventDielectric=80.0)
+```
+
+----------------------------------------
+
+TITLE: Defining CustomTorsionForce with Wildcards in XML
+DESCRIPTION: This snippet illustrates the use of wildcards in CustomTorsionForce definitions. By leaving `class1` and `class4` attributes empty, this rule will match any atom type or class at those positions, specifically targeting a sequence where the second atom has class 'OS' and the third has class 'P'.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_26
+
+LANGUAGE: xml
+CODE:
+```
+<Proper class1="" class2="OS" class3="P" class4="" per="3" phase="0.0" k="0.66944"/>
+```
+
+----------------------------------------
+
+TITLE: Using PlumedForce for Metadynamics
+DESCRIPTION: This Python code demonstrates how to use OpenMM-PLUMED to apply a PLUMED script as a force in an OpenMM simulation. It defines a metadynamics simulation based on the distance between two particles and adds it as a PlumedForce to the system.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/05_add_on_packages.rst#_snippet_6
+
+LANGUAGE: Python
+CODE:
+```
+from openmmplumed import PlumedForce
+
+script = """
+d: DISTANCE ATOMS=1,10
+METAD ARG=d SIGMA=0.2 HEIGHT=0.3 PACE=500"""
+force = PlumedForce(script)
+system.addForce(force)
+```
+
+----------------------------------------
+
+TITLE: Adding Particles to OpenMM System and Nonbonded Force in C++
+DESCRIPTION: This code block adds three argon atoms to the previously created OpenMM System and NonbondedForce. It defines their initial positions, mass, and non-bonded parameters (charge, Lennard-Jones sigma, and well depth). The example hard-codes values for simplicity, emphasizing the importance of unit consistency.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_11
+
+LANGUAGE: C++
+CODE:
+```
+// Create three atoms.
+std::vector<OpenMM::Vec3> initPosInNm(3);
+for (int a = 0; a < 3; ++a)
+{
+    initPosInNm[a] = OpenMM::Vec3(0.5*a,0,0); // location, nm
+
+    system.addParticle(39.95); // mass of Ar, grams per mole
+
+    // charge, L-J sigma (nm), well depth (kJ)
+    nonbond->addParticle(0.0, 0.3350, 0.996); // vdWRad(Ar)=.188 nm
+}
+```
+
+----------------------------------------
+
+TITLE: Creating System with Implicit Solvent Dielectrics (Python)
+DESCRIPTION: This code snippet illustrates how to create an OpenMM System object from a ForceField for implicit solvent simulations. It specifies NoCutoff for the nonbondedMethod and custom soluteDielectric (2.0) and solventDielectric (80.0) values, overriding the default dielectrics. This configuration is essential for accurately modeling electrostatic interactions in an implicit solvent environment.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_44
+
+LANGUAGE: Python
+CODE:
+```
+system=forcefield.createSystem(nonbondedMethod=NoCutoff, soluteDielectric=2.0,
+            solventDielectric=80.0)
+```
+
+----------------------------------------
+
+TITLE: Adding Solvent with Default Box Dimensions (Python)
+DESCRIPTION: This code demonstrates how to add a box of solvent (water and ions) around the solute. The Modeller automatically determines the solute's charge and adds enough counter-ions to neutralize the system, using periodic box dimensions specified in the PDB file if available.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_4
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addSolvent(forcefield)
+```
+
+----------------------------------------
+
+TITLE: Applying Andersen Thermostat for Temperature Coupling (Python)
+DESCRIPTION: This snippet demonstrates how to add an `AndersenThermostat` to an OpenMM `System` object to maintain a constant temperature. It specifies the target temperature (300 K) and collision frequency (1 ps⁻¹) for the thermostat. This is typically used with a `VerletIntegrator`.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_54
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+        constraints=HBonds)
+system.addForce(AndersenThermostat(300*kelvin, 1/picosecond))
+integrator = VerletIntegrator(0.002*picoseconds)
+```
+
+----------------------------------------
+
+TITLE: Creating OpenMM System from AMBER prmtop File (Python)
+DESCRIPTION: This snippet demonstrates creating an OpenMM `System` object directly from an `AmberPrmtopFile`. Unlike PDB-based setups, the `prmtop` file already contains force field parameters, eliminating the need for a separate force field object. It configures the system with Particle Mesh Ewald (PME) for nonbonded interactions, a 1 nanometer cutoff, and applies constraints to hydrogen bonds.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_17
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+        constraints=HBonds)
+```
+
+----------------------------------------
+
+TITLE: Performing Energy Minimization with Custom Tolerance (Python)
+DESCRIPTION: This snippet performs energy minimization, allowing the user to specify a custom `tolerance` for convergence. The minimization will stop when the energy gradient falls below 5 kilojoule/mole/nanometer, providing finer control over the minimization process.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_60
+
+LANGUAGE: Python
+CODE:
+```
+simulation.minimizeEnergy(tolerance=5*kilojoule/mole/nanometer)
+```
+
+----------------------------------------
+
+TITLE: Adding NonbondedForce XML Configuration
+DESCRIPTION: This XML snippet illustrates how to add a NonbondedForce to an OpenMM system. The main tag includes attributes for 1-4 Coulomb and Lennard-Jones scaling factors. Child '<Atom>' tags define properties for individual atom types, such as charge, sigma, and epsilon values.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_21
+
+LANGUAGE: XML
+CODE:
+```
+<NonbondedForce coulomb14scale="0.833333" lj14scale="0.5">
+ <Atom type="0" charge="-0.4157" sigma="0.32499" epsilon="0.71128"/>
+ <Atom type="1" charge="0.2719" sigma="0.10690" epsilon="0.06568"/>
+ <Atom type="2" charge="0.0337" sigma="0.33996" epsilon="0.45772"/>
+ ...
+</NonbondedForce>
+```
+
+----------------------------------------
+
+TITLE: Adding Missing Hydrogens with Default pH (Python)
+DESCRIPTION: This code demonstrates how to add missing hydrogen atoms to a molecular system using the Modeller's addHydrogens method. It requires a force field object to determine the correct positions for the new hydrogens, assuming a default pH of 7 for protonation state determination.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_1
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addHydrogens(forcefield)
+```
+
+----------------------------------------
+
+TITLE: Adding Solvent with Custom Positive Ion and Ionic Strength using OpenMM Modeller (Python)
+DESCRIPTION: This snippet demonstrates how to create a potassium chloride solution with a specific ionic strength (0.1 molar) by using the `positiveIon` option with `modeller.addSolvent`. The `positiveIon` and `negativeIon` parameters allow customization of the ion types, but users must ensure the chosen ions are supported by the selected force field.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_11
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addSolvent(forcefield, ionicStrength=0.1*molar, positiveIon='K+')
+```
+
+----------------------------------------
+
+TITLE: Performing Multiple Integration Steps in TINKER (TINKER-OpenMM C)
+DESCRIPTION: This function instructs OpenMM to advance the simulation by a specified number of time steps. It encapsulates the iterative integration process within the OpenMM Context.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/06_integration_examples.rst#_snippet_9
+
+LANGUAGE: C
+CODE:
+```
+openmm_take_steps()
+```
+
+----------------------------------------
+
+TITLE: Controlling OpenMM Simulation Progress in C
+DESCRIPTION: This snippet manages the simulation's progression and termination. It checks if the simulation time has reached 10 picoseconds and breaks the loop if true. Otherwise, it advances the simulation by 10 time steps using the `integrator.step()` method, noting that more steps are typically used for efficiency in production simulations.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_16
+
+LANGUAGE: C
+CODE:
+```
+if (timeInPs >= 10.)
+    break;
+
+// Advance state many steps at a time, for efficient use of OpenMM.
+integrator.step(10); // (use a lot more than this normally)
+```
+
+----------------------------------------
+
+TITLE: Enabling Energy Calculation in OpenMM getState()
+DESCRIPTION: This snippet illustrates the parameter used when calling the `getState()` method on an OpenMM Context object. Setting `energy=True` ensures that the potential and kinetic energies are calculated and included in the returned `State` object, allowing for energy analysis.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/04_advanced_sim_examples.rst#_snippet_6
+
+LANGUAGE: Python
+CODE:
+```
+energy=True
+```
+
+----------------------------------------
+
+TITLE: Adding Specific Water Model with OpenMM Modeller (Python)
+DESCRIPTION: This snippet demonstrates how to add a specific water model, 'tip5p', to the system using `modeller.addSolvent`. The `model` option allows specifying different water models like 'tip3p', 'spce', 'tip4pew', 'tip5p', and 'swm4ndp'. Ensure the model name is enclosed in single quotes.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_9
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addSolvent(forcefield, model='tip5p')
+```
+
+----------------------------------------
+
+TITLE: Applying Monte Carlo Barostat for Isotropic Pressure Coupling (Python)
+DESCRIPTION: This code shows how to add a `MonteCarloBarostat` to an OpenMM `System` for constant pressure simulations. It sets the target pressure (1 bar) and temperature (300 K). It's crucial to use this with a temperature-regulating integrator or thermostat, matching the specified temperature.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_55
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=PME, nonbondedCutoff=1*nanometer,
+        constraints=HBonds)
+system.addForce(MonteCarloBarostat(1*bar, 300*kelvin))
+integrator = LangevinMiddleIntegrator(300*kelvin, 1/picosecond, 0.004*picoseconds)
+```
+
+----------------------------------------
+
+TITLE: Adding Solvent with Specified Ionic Strength using OpenMM Modeller (Python)
+DESCRIPTION: This code adds a salt solution to the system with a specified ionic strength of 0.1 molar using `modeller.addSolvent`. The `ionicStrength` parameter controls the concentration of added ion pairs. It's important to note that ions used for solute neutralization are not considered in this ionic strength calculation.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_10
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addSolvent(forcefield, ionicStrength=0.1*molar)
+```
+
+----------------------------------------
+
+TITLE: Installing OpenMM-ML with Conda
+DESCRIPTION: This command installs the OpenMM-ML package from the conda-forge channel, providing a selection of standard, pre-trained machine learning potential functions for molecular modeling.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/05_add_on_packages.rst#_snippet_2
+
+LANGUAGE: Bash
+CODE:
+```
+conda install -c conda-forge openmm-ml
+```
+
+----------------------------------------
+
+TITLE: Defining Periodic Torsion Force (Proper/Improper) in OpenMM XML
+DESCRIPTION: This XML snippet illustrates the definition of a PeriodicTorsionForce, including both proper and improper torsion types. Each child tag (<Proper> or <Improper>) defines a rule for periodic torsion interactions among four atoms, specifying their classes, periodicity, phase offset in radians, and force constant in kJ/mol. Proper torsions involve sequentially bonded atoms, while improper torsions involve a central atom bonded to three others.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_14
+
+LANGUAGE: XML
+CODE:
+```
+<PeriodicTorsionForce>
+ <Proper class1="HC" class2="CT" class3="CT" class4="CT" periodicity1="3" phase1="0.0"
+         k1="0.66944"/>
+ <Proper class1="HC" class2="CT" class3="CT" class4="HC" periodicity1="3" phase1="0.0"
+         k1="0.6276"/>
+ ...
+ <Improper class1="N" class2="C" class3="CT" class4="O" periodicity1="2"
+         phase1="3.14159265359" k1="4.6024"/>
+ <Improper class1="N" class2="C" class3="CT" class4="H" periodicity1="2"
+         phase1="3.14159265359" k1="4.6024"/>
+ ...
+</PeriodicTorsionForce>
+```
+
+----------------------------------------
+
+TITLE: Running OpenMM Simulation Steps in Python
+DESCRIPTION: This line executes the molecular dynamics simulation for 10,000 time steps, integrating the equations of motion. After completion, the generated DCD file can be used with visualization and analysis tools like VMD or PyMol.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_13
+
+LANGUAGE: Python
+CODE:
+```
+simulation.step(10000)
+```
+
+----------------------------------------
+
+TITLE: Disabling Rigid Water in System Creation (Python)
+DESCRIPTION: This code snippet shows how to disable the default rigid water behavior in OpenMM by setting rigidWater=False during system creation. This allows water molecules to be flexible, meaning their bond lengths and angles are not constrained. Using flexible water typically requires a smaller integration step size (e.g., 0.5 fs) compared to rigid water models.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_46
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(nonbondedMethod=NoCutoff, constraints=None, rigidWater=False)
+```
+
+----------------------------------------
+
+TITLE: Defining Multiple Periodic Torsion Terms in OpenMM XML
+DESCRIPTION: This XML example demonstrates how to define multiple periodic torsion terms for a single torsion rule. By adding periodicityN, phaseN, and kN attributes (where N is the term number), users can specify multiple periodic components for the same set of four atoms. This allows for more complex torsion profiles, as shown with three distinct terms for a proper torsion.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/06_creating_ffs.rst#_snippet_15
+
+LANGUAGE: XML
+CODE:
+```
+<Proper class1="CT" class2="CT" class3="CT" class4="CT"
+        periodicity1="3" phase1="0.0" k1="0.75312"
+        periodicity2="2" phase2="3.14159265359" k2="1.046"
+        periodicity3="1" phase3="3.14159265359" k3="0.8368"/>
+```
+
+----------------------------------------
+
+TITLE: Verifying OpenMM Installation
+DESCRIPTION: This Python command executes OpenMM's built-in installation test. It confirms that OpenMM is correctly installed, checks for available GPU acceleration platforms (CUDA, OpenCL, HIP), and verifies result consistency across platforms.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/01_getting_started.rst#_snippet_5
+
+LANGUAGE: Shell
+CODE:
+```
+python -m openmm.testInstallation
+```
+
+----------------------------------------
+
+TITLE: Specifying Implicit Solvent with OBC2 in OpenMM
+DESCRIPTION: This code snippet shows how to apply an implicit solvent model, specifically the OBC2 Generalized Born model, when creating an OpenMM `System` from a prmtop file. The `implicitSolvent` parameter is used to select the desired implicit solvent model.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_35
+
+LANGUAGE: Python
+CODE:
+```
+system = prmtop.createSystem(implicitSolvent=OBC2)
+```
+
+----------------------------------------
+
+TITLE: Adding Solvent with Custom Rectangular Box Size (Python)
+DESCRIPTION: This snippet shows how to specify a custom rectangular box size for the solvent. This is useful when the input PDB file does not contain box dimensions or when a specific simulation volume is desired, allowing precise control over the solvent environment.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_5
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addSolvent(forcefield, boxSize=Vec3(5.0, 3.5, 3.5)*nanometers)
+```
+
+----------------------------------------
+
+TITLE: Configuring Multi-GPU Simulation on OpenCL Platform (C++)
+DESCRIPTION: This snippet shows how to configure the OpenCL Platform to utilize multiple GPUs for a simulation. By setting the 'DeviceIndex' property to a comma-separated string of device indices (e.g., '0,1'), OpenMM will distribute the simulation workload across the specified devices, enabling parallel processing.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/04_platform_specifics.rst#_snippet_1
+
+LANGUAGE: C++
+CODE:
+```
+properties["DeviceIndex"] = "0,1";
+```
+
+----------------------------------------
+
+TITLE: Initializing Nose-Hoover Integrator in OpenMM (C++)
+DESCRIPTION: This snippet demonstrates the minimal creation of a `NoseHooverIntegrator` for constant temperature dynamics. It takes the target temperature, heat bath interaction frequency, and integration timestep as arguments, all requiring units. A larger interaction frequency is recommended for initial equilibration.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_49
+
+LANGUAGE: C++
+CODE:
+```
+NoseHooverIntegrator integrator(300*kelvin, 1/picosecond,
+                                    0.004*picoseconds);
+```
+
+----------------------------------------
+
+TITLE: Adding DCD Reporter to OpenMM Simulation in Python
+DESCRIPTION: This code adds a `DCDReporter` to the simulation, configured to write molecular structures to `output.dcd` every 1000 time steps. This reporter is used for trajectory output, enabling later visualization and analysis of the simulation's progress.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_11
+
+LANGUAGE: Python
+CODE:
+```
+simulation.reporters.append(DCDReporter('output.dcd', 1000))
+```
+
+----------------------------------------
+
+TITLE: Specifying CUDA Platform for OpenMM Simulation (Python)
+DESCRIPTION: This Python snippet demonstrates how to explicitly select the CUDA platform for an OpenMM simulation. It retrieves the 'CUDA' Platform object and then passes it as a parameter when initializing the Simulation object, ensuring the simulation runs on a CUDA-enabled GPU.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_23
+
+LANGUAGE: Python
+CODE:
+```
+platform = Platform.getPlatform('CUDA')
+simulation = Simulation(prmtop.topology, system, integrator, platform)
+```
+
+----------------------------------------
+
+TITLE: Creating OpenMM Integrator and Context in C++
+DESCRIPTION: This snippet initializes the OpenMM `Integrator` (specifically a `LangevinMiddleIntegrator`) and `Context` objects, which are essential for running a simulation. It connects the previously defined `System` with the `Integrator`, sets the initial particle positions from the collected data, and retrieves the name of the platform chosen by the `Context` for execution. Unit conversions are applied to the integrator's parameters.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/library/03_tutorials.rst#_snippet_25
+
+LANGUAGE: C++
+CODE:
+```
+// Choose an Integrator for advancing time, and a Context connecting the
+// System with the Integrator for simulation. Let the Context choose the
+// best available Platform. Initialize the configuration from the default
+// positions we collected above. Initial velocities will be zero but could
+// have been set here.
+omm->integrator = new OpenMM::LangevinMiddleIntegrator(temperature,
+    frictionInPs,
+    stepSizeInFs * OpenMM::PsPerFs);
+omm->context    = new OpenMM::Context(*omm->system, *omm->integrator);
+omm->context->setPositions(initialPosInNm);
+
+platformName = omm->context->getPlatform().getName();
+return omm;
+```
+
+----------------------------------------
+
+TITLE: Performing Energy Minimization with Max Iterations (Python)
+DESCRIPTION: This code snippet performs energy minimization, setting a `maxIterations` limit. The minimization will terminate after 100 iterations, regardless of whether convergence has been fully achieved, which is useful for controlling simulation time or preventing infinite loops.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/02_running_sims.rst#_snippet_61
+
+LANGUAGE: Python
+CODE:
+```
+simulation.minimizeEnergy(maxIterations=100)
+```
+
+----------------------------------------
+
+TITLE: Adding Specific Number of Solvent Molecules (Python)
+DESCRIPTION: This snippet shows how to add a precise number of solvent molecules (including both water and ions) to the system. This is particularly useful for ensuring consistent solvent amounts when solvating multiple conformations of the same molecule.
+SOURCE: https://github.com/openmm/openmm/blob/master/docs-source/usersguide/application/03_model_building_editing.rst#_snippet_8
+
+LANGUAGE: Python
+CODE:
+```
+modeller.addSolvent(forcefield, numAdded=5000)
+```
