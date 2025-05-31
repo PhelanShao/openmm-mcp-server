@@ -5,8 +5,10 @@ import asyncio
 import uuid
 from typing import Dict, Any, Optional
 
-# Placeholder for OpenMMEngine and potential data storage
-from .openmm_engine import OpenMMEngine # Import OpenMMEngine
+# Engine imports
+from .openmm_engine import OpenMMEngine
+from .abacus_engine import AbacusEngine # Added for DFT tasks
+
 from src.config import config as app_config # For task data directory, etc.
 import os
 import json # For JSON operations
@@ -18,8 +20,17 @@ class Task:
     def __init__(self, task_id: str, config: Dict[str, Any]):
         self.task_id: str = task_id
         self.config: Dict[str, Any] = config
+        self.task_type: str = config.get("task_type", "md") # Default to "md"
         self.status: str = "pending"  # e.g., pending, running, paused, completed, failed
         self.progress: Dict[str, Any] = {"current_step": 0, "total_steps": config.get("steps", 0)}
+        # For DFT tasks, "steps" might not be directly applicable in the same way.
+        # Progress reporting for DFT might be based on SCF cycles or other metrics.
+        # This might need adjustment if DFT tasks have a different concept of "total_steps".
+        # For now, initialize progress, but it might be primarily updated by MD tasks.
+        if self.task_type == "dft" and "steps" not in config: # DFT tasks might not have "steps"
+            self.progress["total_steps"] = 1 # Placeholder for DFT progress (e.g., 1 for the whole calc)
+
+
         self.results: Optional[Dict[str, Any]] = None
         self.error_message: Optional[str] = None
         self.simulation_instance: Any = None # Will hold the OpenMM Simulation object or similar
@@ -44,6 +55,7 @@ class Task:
         return {
             "task_id": self.task_id,
             "config": self.config,
+            "task_type": self.task_type,
             "status": self.status,
             "progress": self.progress,
             "results": self.results,
@@ -59,9 +71,35 @@ class Task:
         if not task_id or not config:
             raise ValueError("Task data is missing task_id or config.")
         
-        task = cls(task_id=task_id, config=config)
+        # task_type is now part of config, but also stored explicitly
+        # Ensure config in Task object is the source of truth for task_type upon creation
+        # For deserialization, we can get it from the persisted task_type field
+        # or default from config if task_type field is missing (for backward compatibility)
+
+        task = cls(task_id=task_id, config=config) # task_type is set from config here
         task.status = data.get("status", "pending")
-        task.progress = data.get("progress", {"current_step": 0, "total_steps": config.get("steps", 0)})
+
+        # If 'task_type' exists in the persisted data, it overrides the one from config during from_dict
+        # This ensures that loaded tasks retain their specific persisted type.
+        # The Task.__init__ already sets task_type from config.get("task_type", "md").
+        # If data["task_type"] is present, it means it was explicitly saved.
+        # We need to ensure that the task.task_type reflects the *saved* type.
+        # The config inside the task object should also reflect this.
+        persisted_task_type = data.get("task_type")
+        if persisted_task_type:
+            task.task_type = persisted_task_type
+            # Also ensure the config within the task reflects this persisted type
+            # if it's not already there or different.
+            if task.config.get("task_type") != persisted_task_type:
+                task.config["task_type"] = persisted_task_type
+
+
+        # Adjust progress initialization for DFT if necessary
+        default_total_steps = config.get("steps", 0)
+        if task.task_type == "dft" and "steps" not in config:
+            default_total_steps = 1 # Placeholder for DFT
+
+        task.progress = data.get("progress", {"current_step": 0, "total_steps": default_total_steps})
         task.results = data.get("results")
         task.error_message = data.get("error_message")
         # simulation_instance and async_task_handle are runtime objects and not restored directly
@@ -73,7 +111,8 @@ class TaskManager:
     def __init__(self):
         self.logger = get_logger(__name__)
         self._tasks: Dict[str, Task] = {}
-        self._openmm_engine = OpenMMEngine() # Instantiate the OpenMMEngine
+        self._openmm_engine = OpenMMEngine()
+        self._abacus_engine = AbacusEngine() # Instantiate AbacusEngine
         self._task_queue = asyncio.Queue() # For managing tasks to be run (can be used for more advanced scheduling)
         self._concurrency_semaphore = asyncio.Semaphore(app_config.MAX_CONCURRENT_TASKS)
         self.logger.info(f"Task manager initialized with MAX_CONCURRENT_TASKS={app_config.MAX_CONCURRENT_TASKS}")
@@ -141,14 +180,26 @@ class TaskManager:
     async def create_task(self, config: Dict[str, Any]) -> str:
         """
         Creates a new computation task.
-        Config should include parameters like pdb_file, forcefield, steps, etc.
+        Config must include "task_type" ("md" or "dft").
+        Other parameters depend on the task_type.
         """
         task_id = str(uuid.uuid4())
-        # Basic validation of config (can be expanded)
-        if not config.get("pdb_file") or not config.get("forcefield") or not config.get("steps"):
-            raise ValueError("Task configuration missing required fields (pdb_file, forcefield, steps).")
 
-        task = Task(task_id=task_id, config=config)
+        task_type = config.get("task_type")
+        if not task_type or task_type not in ["md", "dft"]:
+            raise ValueError(f"Task configuration must include a valid 'task_type' ('md' or 'dft'). Found: {task_type}")
+
+        # Basic validation for MD tasks (can be expanded)
+        if task_type == "md":
+            if not config.get("pdb_file") or not config.get("forcefield_files") or config.get("steps") is None:
+                raise ValueError("MD task configuration missing required fields (pdb_file, forcefield_files, steps).")
+        # Basic validation for DFT tasks (can be expanded)
+        elif task_type == "dft":
+            if not config.get("dft_params") or not isinstance(config.get("dft_params"), dict):
+                 raise ValueError("DFT task configuration missing required 'dft_params' dictionary.")
+            # Further checks for specific keys within dft_params can be added here or in AbacusEngine.
+
+        task = Task(task_id=task_id, config=config) # Task.__init__ now handles task_type from config
         async with self._lock:
             self._tasks[task_id] = task
         await self._save_task_to_disk(task) # Save task upon creation
@@ -229,197 +280,251 @@ class TaskManager:
                 try: os.remove(tmp_task_file_path)
                 except OSError: self.logger.error(f"Failed to remove temporary file {tmp_task_file_path} after sync Exception.")
 
-    async def _run_simulation_task(self, task: Task):
-        """Internal method to run the simulation for a given task, managed by a semaphore."""
+    async def _execute_task_loop(self, task: Task):
+        """Internal task execution loop, dispatching to MD or DFT runners."""
         async with self._concurrency_semaphore:
-            self.logger.info(f"Task {task.task_id}: Acquired semaphore, starting execution. Active tasks: {app_config.MAX_CONCURRENT_TASKS - self._concurrency_semaphore._value}/{app_config.MAX_CONCURRENT_TASKS}")
-            # Entire simulation logic is within the try block, which is inside the semaphore context
-            try: # This try block should be indented under the `async with`
-                # Ensure task status is still 'running' before proceeding,
-                # as it might have been changed (e.g. to 'stopped') between being scheduled and acquiring semaphore
-                if task.status != "running": # This check should be done *after* acquiring semaphore and *before* heavy work
-                    self.logger.warning(f"Task {task.task_id}: Status changed to '{task.status}' before heavy execution could start post-semaphore. Aborting run.")
-                    return
+            self.logger.info(f"Task [{task.task_id} - {task.task_type.upper()}]: Acquired semaphore. Active tasks: {app_config.MAX_CONCURRENT_TASKS - self._concurrency_semaphore._value}/{app_config.MAX_CONCURRENT_TASKS}")
 
-                task.update_status("initializing") # Status update after acquiring semaphore and passing initial check
-                self.logger.info(f"Task {task.task_id}: Initializing simulation setup...")
+            if task.status != "running":
+                self.logger.warning(f"Task [{task.task_id}]: Status changed to '{task.status}' before execution could start. Aborting.")
+                return
 
-                # 1. Setup system
-                pdb_input_type = task.config.get("pdb_input_type", "content")
-                pdb_data = task.config.get("pdb_data")
-                
-                pdb_file_content_for_engine: Optional[str] = None
-                pdb_file_path_for_engine: Optional[str] = None
+            task.update_status("initializing")
+            await self._save_task_to_disk(task) # Persist initializing status, important for DFT too
+            self.logger.info(f"Task [{task.task_id} - {task.task_type.upper()}]: Initializing...")
 
-                if pdb_input_type == "content":
-                    pdb_file_content_for_engine = pdb_data
-                elif pdb_input_type == "file_path":
-                    pdb_file_path_for_engine = pdb_data
+            try:
+                if task.task_type == "md":
+                    await self._run_md_task(task)
+                elif task.task_type == "dft":
+                    await self._run_dft_task(task)
                 else:
-                    raise ValueError(f"Invalid pdb_input_type: {pdb_input_type}")
-
-                forcefield_files = task.config.get("forcefield_files", ["amber14-all.xml", "amber14/tip3pfb.xml"])
-                
-                topology, positions, openmm_system = await self._openmm_engine.setup_system(
-                    pdb_file_content=pdb_file_content_for_engine,
-                    pdb_file_path=pdb_file_path_for_engine,
-                    forcefield_files=forcefield_files,
-                    nonbonded_method_str=task.config.get("nonbonded_method", "PME"),
-                    nonbonded_cutoff_nm=float(task.config.get("nonbonded_cutoff_nm", 1.0)),
-                    constraints_str=task.config.get("constraints", "HBonds")
-                )
-
-                # 2. Create simulation
-                integrator_cfg = task.config.get("integrator", {"type": "LangevinMiddle", "temperature_K": 300, "friction_coeff_ps": 1.0, "step_size_ps": 0.002})
-                platform_name = task.config.get("platform_name", app_config.DEFAULT_OPENMM_PLATFORM)
-                platform_props = task.config.get("platform_properties")
-
-                task.simulation_instance = await self._openmm_engine.create_simulation(
-                    topology=topology,
-                    system=openmm_system,
-                    integrator_config=integrator_cfg,
-                    platform_name=platform_name,
-                    platform_properties=platform_props
-                )
-                
-                if positions and task.simulation_instance:
-                    await self._openmm_engine.set_initial_positions(task.simulation_instance, positions)
-
-                output_config = task.config.get("output_config", {})
-                processed_output_config = self._process_output_paths(task.task_id, output_config)
-                await self._openmm_engine.configure_reporters(task.simulation_instance, processed_output_config)
-                
-                if task.config.get("minimize_energy", False):
-                    self.logger.info(f"Task {task.task_id}: Performing energy minimization...")
-                    minimize_max_iter = int(task.config.get("minimize_max_iterations", 0))
-                    minimize_tolerance_kj_mol_nm = task.config.get("minimize_tolerance_kj_mol_nm")
-                    if minimize_tolerance_kj_mol_nm is not None:
-                        minimize_tolerance_kj_mol_nm = float(minimize_tolerance_kj_mol_nm)
-                    
-                    await self._openmm_engine.minimize_energy(
-                        task.simulation_instance,
-                        tolerance_kj_mol_nm=minimize_tolerance_kj_mol_nm,
-                        max_iterations=minimize_max_iter
-                    )
-                    self.logger.info(f"Task {task.task_id}: Energy minimization complete.")
-
-                if task.config.get("set_velocities_to_temperature", False) and task.simulation_instance:
-                    temp_kelvin = float(integrator_cfg.get("temperature_K", 300))
-                    await self._openmm_engine.set_velocities_to_temperature(task.simulation_instance, temp_kelvin)
-
-                # Check status again before starting the main loop, in case it was changed during setup
-                if task.status != "running" and task.status != "initializing": # initializing is ok here
-                     self.logger.warning(f"Task {task.task_id}: Status changed to '{task.status}' during setup. Aborting run loop.")
-                     # No 'return' here, let it fall through to finally for cleanup
-                else:
-                    task.update_status("running") # Explicitly set to running if it was initializing
-                    total_steps = int(task.config.get("steps", 0))
-                    self.logger.info(f"Task {task.task_id}: Running simulation for {total_steps} steps...")
-
-                    run_chunk_size = int(task.config.get("run_chunk_size", 1000))
-                    checkpoint_interval_steps = int(task.config.get("checkpoint_interval_steps", 0))
-                    
-                    checkpoint_file_path = None
-                    if checkpoint_interval_steps > 0:
-                        cp_reporter_cfg = task.config.get("output_config", {}).get("checkpoint_reporter", {})
-                        processed_cp_cfg_item = self._process_output_paths(task.task_id, {"checkpoint_reporter": cp_reporter_cfg}).get("checkpoint_reporter", {})
-                        if isinstance(processed_cp_cfg_item, dict):
-                            checkpoint_file_path = processed_cp_cfg_item.get("file")
-                        if not checkpoint_file_path and cp_reporter_cfg.get("file"):
-                             checkpoint_file_path = os.path.join(app_config.TASK_DATA_DIR, task.task_id, "outputs", os.path.basename(cp_reporter_cfg.get("file")))
-                        elif not checkpoint_file_path :
-                            checkpoint_file_path = os.path.join(app_config.TASK_DATA_DIR, task.task_id, "outputs", "checkpoint.chk")
-                        if checkpoint_file_path:
-                            os.makedirs(os.path.dirname(checkpoint_file_path), exist_ok=True)
-
-                    current_simulation_step = 0
-                    while current_simulation_step < total_steps:
-                        if task.status != "running":
-                            self.logger.info(f"Task {task.task_id}: Simulation loop interrupted (status: {task.status}).")
-                            break
-
-                        steps_to_run_this_chunk = min(run_chunk_size, total_steps - current_simulation_step)
-                        
-                        if not task.simulation_instance:
-                            self.logger.error(f"Task {task.task_id}: Simulation instance became unavailable during run.")
-                            raise Exception("Simulation instance is not available.") # Critical error
-                        
-                        await self._openmm_engine.run_simulation_steps(task.simulation_instance, steps_to_run_this_chunk)
-                        
-                        current_simulation_step += steps_to_run_this_chunk
-                        task.update_progress(current_simulation_step)
-                        self.logger.debug(f"Task {task.task_id}: Progress {current_simulation_step}/{total_steps} (Sim obj step: {task.simulation_instance.currentStep if task.simulation_instance else 'N/A'})")
-
-                        if checkpoint_file_path and checkpoint_interval_steps > 0 and \
-                           (current_simulation_step % checkpoint_interval_steps == 0 or current_simulation_step == total_steps):
-                            if task.simulation_instance:
-                                self.logger.info(f"Task {task.task_id}: Saving checkpoint at step {current_simulation_step} to {checkpoint_file_path}")
-                                await self._openmm_engine.save_checkpoint(task.simulation_instance, checkpoint_file_path)
-                    
-                    if task.status == "running":
-                        task.update_status("completed")
-                        final_state_info = {}
-                        if task.simulation_instance:
-                            final_state_info = await self._openmm_engine.get_current_state_info(task.simulation_instance, get_energy=True)
-                        
-                        results_summary = {"final_state": final_state_info}
-                        output_files_summary = {}
-                        processed_output_config_for_results = self._process_output_paths(task.task_id, task.config.get("output_config", {}))
-                        for reporter_type, cfg_item_or_list_results in processed_output_config_for_results.items():
-                            cfgs_to_check_results = cfg_item_or_list_results if isinstance(cfg_item_or_list_results, list) else [cfg_item_or_list_results]
-                            for cfg_results in cfgs_to_check_results:
-                                if isinstance(cfg_results, dict) and "file" in cfg_results and cfg_results["file"].lower() not in ["stdout", "stderr"]:
-                                    rel_path = os.path.relpath(cfg_results["file"], app_config.TASK_DATA_DIR)
-                                    output_files_summary[f"{reporter_type}_file"] = rel_path
-                        
-                        if output_files_summary:
-                            results_summary["output_files"] = output_files_summary
-                        if checkpoint_file_path and (current_simulation_step == total_steps):
-                            results_summary["checkpoint_file"] = os.path.relpath(checkpoint_file_path, app_config.TASK_DATA_DIR)
-
-                        task.set_results(results_summary)
-                        self.logger.info(f"Task {task.task_id}: Simulation completed. Results: {results_summary}")
-
-                    elif task.status == "stopped":
-                        self.logger.info(f"Task {task.task_id}: Stopped by user.")
+                    self.logger.error(f"Task [{task.task_id}]: Unknown task_type '{task.task_type}'. Cannot execute.")
+                    task.update_status("failed", f"Unknown task_type: {task.task_type}")
+                    await self._save_task_to_disk(task)
 
             except asyncio.CancelledError:
+                self.logger.info(f"Task [{task.task_id} - {task.task_type.upper()}]: Execution was cancelled by request.")
                 task.update_status("stopped", "Task was cancelled during execution.")
-                self.logger.info(f"Task {task.task_id}: Execution was cancelled by request.")
+                await self._save_task_to_disk(task)
             except Exception as e:
-                self.logger.error(f"Task {task.task_id}: Error during simulation - {str(e)}", exc_info=True)
+                self.logger.error(f"Task [{task.task_id} - {task.task_type.upper()}]: Error during execution - {str(e)}", exc_info=True)
                 task.update_status("failed", error_message=str(e))
+                await self._save_task_to_disk(task)
             finally:
-                if task.simulation_instance:
-                    self.logger.info(f"Task {task.task_id}: Cleaning up simulation instance in _run_simulation_task.")
+                if task.task_type == "md" and task.simulation_instance: # Specific to MD tasks
+                    self.logger.info(f"Task [{task.task_id} - MD]: Cleaning up OpenMM simulation instance.")
                     await self._openmm_engine.cleanup_simulation(task.simulation_instance)
-                task.simulation_instance = None
-                self.logger.info(f"Task {task.task_id}: _run_simulation_task finished with final status {task.status}.")
-                self.logger.info(f"Task {task.task_id}: Releasing semaphore. Active tasks: {app_config.MAX_CONCURRENT_TASKS - (self._concurrency_semaphore._value +1 if self._concurrency_semaphore._value < app_config.MAX_CONCURRENT_TASKS else self._concurrency_semaphore._value)}/{app_config.MAX_CONCURRENT_TASKS}")
+                    task.simulation_instance = None
+                # DFT tasks might have their own cleanup via abacus_engine if needed, or handled by work_dir persistence strategy.
 
+                self.logger.info(f"Task [{task.task_id} - {task.task_type.upper()}]: Execution loop finished with final status '{task.status}'.")
+                active_tasks_count = app_config.MAX_CONCURRENT_TASKS - (self._concurrency_semaphore._value +1 if self._concurrency_semaphore._value < app_config.MAX_CONCURRENT_TASKS else self._concurrency_semaphore._value)
+                self.logger.info(f"Task [{task.task_id}]: Releasing semaphore. Active tasks: {active_tasks_count}/{app_config.MAX_CONCURRENT_TASKS}")
+
+    async def _run_md_task(self, task: Task):
+        """Handles the execution of an MD task."""
+        self.logger.info(f"Task [{task.task_id} - MD]: Starting MD task execution.")
+        # --- This is the original _run_simulation_task logic for OpenMM ---
+        pdb_input_type = task.config.get("pdb_input_type", "content")
+        pdb_data = task.config.get("pdb_data")
+        pdb_file_content_for_engine: Optional[str] = None
+        pdb_file_path_for_engine: Optional[str] = None
+        if pdb_input_type == "content": pdb_file_content_for_engine = pdb_data
+        elif pdb_input_type == "file_path": pdb_file_path_for_engine = pdb_data
+        else: raise ValueError(f"Invalid pdb_input_type: {pdb_input_type}")
+
+        forcefield_files = task.config.get("forcefield_files", ["amber14-all.xml", "amber14/tip3pfb.xml"])
+
+        topology, positions, openmm_system = await self._openmm_engine.setup_system(
+            pdb_file_content=pdb_file_content_for_engine,
+            pdb_file_path=pdb_file_path_for_engine,
+            forcefield_files=forcefield_files,
+            nonbonded_method_str=task.config.get("nonbonded_method", "PME"),
+            nonbonded_cutoff_nm=float(task.config.get("nonbonded_cutoff_nm", 1.0)),
+            constraints_str=task.config.get("constraints", "HBonds")
+        )
+
+        integrator_cfg = task.config.get("integrator", {"type": "LangevinMiddle", "temperature_K": 300, "friction_coeff_ps": 1.0, "step_size_ps": 0.002})
+        platform_name = task.config.get("platform_name", app_config.DEFAULT_OPENMM_PLATFORM)
+        platform_props = task.config.get("platform_properties")
+
+        task.simulation_instance = await self._openmm_engine.create_simulation(
+            topology=topology, system=openmm_system, integrator_config=integrator_cfg,
+            platform_name=platform_name, platform_properties=platform_props
+        )
+
+        if positions and task.simulation_instance:
+            await self._openmm_engine.set_initial_positions(task.simulation_instance, positions)
+
+        output_config = task.config.get("output_config", {})
+        processed_output_config = self._process_output_paths(task.task_id, output_config) # Uses task_id for path construction
+        await self._openmm_engine.configure_reporters(task.simulation_instance, processed_output_config)
+
+        if task.config.get("minimize_energy", False):
+            self.logger.info(f"Task [{task.task_id} - MD]: Performing energy minimization...")
+            minimize_max_iter = int(task.config.get("minimize_max_iterations", 0))
+            minimize_tolerance_kj_mol_nm = task.config.get("minimize_tolerance_kj_mol_nm")
+            if minimize_tolerance_kj_mol_nm is not None: minimize_tolerance_kj_mol_nm = float(minimize_tolerance_kj_mol_nm)
+            await self._openmm_engine.minimize_energy(
+                task.simulation_instance, tolerance_kj_mol_nm=minimize_tolerance_kj_mol_nm, max_iterations=minimize_max_iter)
+            self.logger.info(f"Task [{task.task_id} - MD]: Energy minimization complete.")
+
+        if task.config.get("set_velocities_to_temperature", False) and task.simulation_instance:
+            temp_kelvin = float(integrator_cfg.get("temperature_K", 300))
+            await self._openmm_engine.set_velocities_to_temperature(task.simulation_instance, temp_kelvin)
+
+        if task.status != "running" and task.status != "initializing":
+             self.logger.warning(f"Task [{task.task_id} - MD]: Status changed to '{task.status}' during setup. Aborting run loop.")
+             return # Exit MD task run, finally in _execute_task_loop will handle cleanup.
+
+        task.update_status("running") # Set to running if it was initializing
+        # No immediate save here, as start_task already saved "running" status.
+        # Subsequent saves will happen at end of chunks or final states.
+
+        total_steps = int(task.config.get("steps", 0))
+        self.logger.info(f"Task [{task.task_id} - MD]: Running simulation for {total_steps} steps...")
+        run_chunk_size = int(task.config.get("run_chunk_size", 1000))
+        checkpoint_interval_steps = int(task.config.get("checkpoint_interval_steps", 0))
+
+        checkpoint_file_path = None
+        if checkpoint_interval_steps > 0:
+            cp_reporter_cfg = task.config.get("output_config", {}).get("checkpoint_reporter", {})
+            processed_cp_cfg_item = self._process_output_paths(task.task_id, {"checkpoint_reporter": cp_reporter_cfg}).get("checkpoint_reporter", {})
+            if isinstance(processed_cp_cfg_item, dict): checkpoint_file_path = processed_cp_cfg_item.get("file")
+            if not checkpoint_file_path and cp_reporter_cfg.get("file"):
+                 checkpoint_file_path = os.path.join(app_config.TASK_DATA_DIR, task.task_id, "outputs", os.path.basename(cp_reporter_cfg.get("file")))
+            elif not checkpoint_file_path:
+                checkpoint_file_path = os.path.join(app_config.TASK_DATA_DIR, task.task_id, "outputs", "checkpoint.chk")
+            if checkpoint_file_path: os.makedirs(os.path.dirname(checkpoint_file_path), exist_ok=True)
+
+        current_simulation_step = 0
+        while current_simulation_step < total_steps:
+            if task.status != "running":
+                self.logger.info(f"Task [{task.task_id} - MD]: Simulation loop interrupted (status: {task.status}).")
+                break
+            steps_to_run_this_chunk = min(run_chunk_size, total_steps - current_simulation_step)
+            if not task.simulation_instance:
+                self.logger.error(f"Task [{task.task_id} - MD]: Simulation instance became unavailable.")
+                raise Exception("MD Simulation instance is not available.")
+            await self._openmm_engine.run_simulation_steps(task.simulation_instance, steps_to_run_this_chunk)
+            current_simulation_step += steps_to_run_this_chunk
+            task.update_progress(current_simulation_step) # total_steps is already set
+            self.logger.debug(f"Task [{task.task_id} - MD]: Progress {current_simulation_step}/{total_steps}")
+            if checkpoint_file_path and checkpoint_interval_steps > 0 and \
+               (current_simulation_step % checkpoint_interval_steps == 0 or current_simulation_step == total_steps):
+                if task.simulation_instance:
+                    self.logger.info(f"Task [{task.task_id} - MD]: Saving checkpoint at step {current_simulation_step} to {checkpoint_file_path}")
+                    await self._openmm_engine.save_checkpoint(task.simulation_instance, checkpoint_file_path)
+
+        if task.status == "running": # If loop finished and task wasn't stopped/paused
+            task.update_status("completed")
+            # await self._save_task_to_disk(task) # This will be done in the main _execute_task_loop finally or success
+            final_state_info = {}
+            if task.simulation_instance:
+                final_state_info = await self._openmm_engine.get_current_state_info(task.simulation_instance, get_energy=True)
+            results_summary = {"final_state": final_state_info}
+            output_files_summary = {}
+            processed_output_config_for_results = self._process_output_paths(task.task_id, task.config.get("output_config", {}))
+            for reporter_type, cfg_item_or_list_results in processed_output_config_for_results.items():
+                cfgs_to_check = cfg_item_or_list_results if isinstance(cfg_item_or_list_results, list) else [cfg_item_or_list_results]
+                for cfg_r in cfgs_to_check:
+                    if isinstance(cfg_r, dict) and "file" in cfg_r and cfg_r["file"].lower() not in ["stdout", "stderr"]:
+                        rel_path = os.path.relpath(cfg_r["file"], app_config.TASK_DATA_DIR)
+                        output_files_summary[f"{reporter_type}_file"] = rel_path
+            if output_files_summary: results_summary["output_files"] = output_files_summary
+            if checkpoint_file_path and (current_simulation_step == total_steps):
+                results_summary["checkpoint_file"] = os.path.relpath(checkpoint_file_path, app_config.TASK_DATA_DIR)
+            task.set_results(results_summary)
+            self.logger.info(f"Task [{task.task_id} - MD]: MD simulation completed. Results: {results_summary}")
+        elif task.status == "stopped":
+            self.logger.info(f"Task [{task.task_id} - MD]: MD simulation stopped by user.")
+        # Other statuses (failed, paused) will be handled by the main loop or specific control actions.
+
+    async def _run_dft_task(self, task: Task):
+        """Handles the execution of a DFT task using AbacusEngine."""
+        self.logger.info(f"Task [{task.task_id} - DFT]: Starting DFT task execution.")
+
+        work_dir = os.path.join(app_config.TASK_DATA_DIR, task.task_id, "dft_calc")
+        dft_params = task.config.get("dft_params", {})
+        abacus_cmd = task.config.get("abacus_command") # May be None, AbacusEngine will use its default
+
+        # Ensure work_dir exists (AbacusEngine's prepare_input also does this, but good to be sure)
+        try:
+            os.makedirs(work_dir, exist_ok=True)
+        except OSError as e:
+            self.logger.error(f"Task [{task.task_id} - DFT]: Failed to create DFT working directory {work_dir}: {e}")
+            task.update_status("failed", f"Failed to create DFT work_dir: {e}")
+            # No need to save here, will be saved in _execute_task_loop's except block
+            raise # Re-raise to be caught by _execute_task_loop's main try-except
+
+        # 1. Prepare input files
+        self.logger.info(f"Task [{task.task_id} - DFT]: Preparing input files...")
+        # Progress update: before input preparation
+        task.update_progress(current_step=0, total_steps=3) # 3 steps: prepare, run, get_results
+
+        prep_info = await self._abacus_engine.prepare_input(task.task_id, dft_params, work_dir)
+        self.logger.info(f"Task [{task.task_id} - DFT]: Input preparation complete. Info: {prep_info}")
+        # Progress update: after input preparation
+        task.update_progress(current_step=1)
+
+
+        # 2. Run calculation
+        if task.status != "running": # Check if task was paused/stopped during input prep
+            self.logger.info(f"Task [{task.task_id} - DFT]: Task status '{task.status}'. Aborting before run.")
+            return
+
+        self.logger.info(f"Task [{task.task_id} - DFT]: Running Abacus calculation...")
+        run_result = await self._abacus_engine.run_calculation(task.task_id, work_dir, abacus_cmd)
+        self.logger.info(f"Task [{task.task_id} - DFT]: Calculation run complete. Result: {run_result}")
+        # Progress update: after run calculation
+        task.update_progress(current_step=2)
+
+        if run_result.get("status") != "completed": # Based on AbacusEngine's mock return
+            error_msg = run_result.get("message", "DFT calculation execution failed.")
+            self.logger.error(f"Task [{task.task_id} - DFT]: {error_msg}")
+            task.update_status("failed", error_msg)
+            # No need to save here, will be saved in _execute_task_loop's except block
+            # Raise an exception to ensure it's caught by the main try-except for consistent error handling
+            raise Exception(error_msg)
+
+        # 3. Get results
+        if task.status != "running": # Check if task was paused/stopped during run
+            self.logger.info(f"Task [{task.task_id} - DFT]: Task status '{task.status}'. Aborting before get_results.")
+            return
+
+        self.logger.info(f"Task [{task.task_id} - DFT]: Retrieving results...")
+        results = await self._abacus_engine.get_results(task.task_id, work_dir)
+        task.set_results(results)
+        self.logger.info(f"Task [{task.task_id} - DFT]: Results retrieved: {results}")
+        # Progress update: after get_results
+        task.update_progress(current_step=3)
+
+        task.update_status("completed") # Final status for a successful run
+        # No need to save here, will be saved in _execute_task_loop after successful completion.
 
     async def start_task(self, task_id: str) -> None:
         """Starts or resumes a computation task."""
         task = self._get_task_or_raise(task_id)
 
         if task.status == "running":
-            self.logger.info(f"Task {task_id} is already running.")
+            self.logger.info(f"Task [{task_id}] is already running.")
             return
         if task.status == "completed" or task.status == "failed":
-            self.logger.warning(f"Task {task_id} is already {task.status}. Cannot restart/resume.")
+            self.logger.warning(f"Task [{task_id}] is already {task.status}. Cannot restart/resume.")
             return
 
         if task.async_task_handle and not task.async_task_handle.done():
-             self.logger.warning(f"Task {task_id} (status: {task.status}) has an existing async_task_handle that is not done. This might indicate an issue or a previous unclean stop.")
-             # Consider if the old handle should be cancelled here if we intend to restart.
-             # For now, proceeding will create a new handle, potentially orphaning the old one if not managed.
+             self.logger.warning(f"Task [{task_id}] (status: {task.status}) has an existing async_task_handle that is not done. This might indicate an issue or a previous unclean stop.")
         
-        if task.status == "pending" or task.status == "paused":
+        if task.status == "pending" or task.status == "paused" or task.status == "interrupted":
+            original_status = task.status
             task.update_status("running")
-            self.logger.info(f"Task {task_id} (status: {task.status}) starting/resuming execution.")
-            task.async_task_handle = asyncio.create_task(self._run_simulation_task(task))
+            await self._save_task_to_disk(task)
+            self.logger.info(f"Task [{task_id}] (status: {original_status}) starting/resuming execution, now 'running'.")
+            task.async_task_handle = asyncio.create_task(self._execute_task_loop(task)) # Changed to _execute_task_loop
         else:
-            self.logger.warning(f"Task {task_id} cannot be started/resumed from its current status: {task.status}")
+            self.logger.warning(f"Task [{task_id}] cannot be started/resumed from its current status: {task.status}. Only pending, paused, or interrupted tasks can be started.")
 
 
     async def pause_task(self, task_id: str) -> None:
@@ -542,6 +647,15 @@ class TaskManager:
             self.logger.warning(f"_get_task_or_raise: Task with ID '{task_id}' not found in self._tasks.")
             raise ValueError(f"Task with ID '{task_id}' not found.")
         return task
+
+    def get_all_tasks(self) -> list[Task]:
+        """Returns a list of all task objects."""
+        # Consider if a lock is needed if tasks can be added/deleted concurrently
+        # with this call. For now, assuming _tasks.values() provides a reasonably
+        # consistent snapshot for iteration. If _tasks itself is being modified
+        # (e.g. re-assigned or cleared), a lock would be more critical.
+        # list() creates a copy, so the list itself is safe from concurrent modification.
+        return list(self._tasks.values())
 
     # Optional: A worker coroutine if using _task_queue for processing
     # async def worker(self):

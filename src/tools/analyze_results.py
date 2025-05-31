@@ -9,6 +9,24 @@ from src.utils.logging_config import get_logger
 
 logger = get_logger(__name__)
 
+ANALYZE_RESULTS_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "task_id": {"type": "string", "description": "ID of the task to analyze."},
+        "analysis_type": {
+            "type": "string",
+            "enum": ["energy", "rmsd", "rdf", "trajectory_info"],
+            "description": "The type of analysis to perform."
+        },
+        "parameters": {
+            "type": "object",
+            "description": "Optional parameters for the specific analysis type (e.g., reference PDB for RMSD, atom selections).",
+            "default": {}
+        }
+    },
+    "required": ["task_id", "analysis_type"]
+}
+
 async def run_analyze_results(task_manager: TaskManager, arguments: Dict[str, Any]) -> Dict[str, Any]:
     """
     Analyzes the results of a completed simulation task.

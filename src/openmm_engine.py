@@ -412,16 +412,48 @@ class OpenMMEngine:
     #     self.logger.info(f"Trajectory export to {format_type} at {filename} is typically handled by reporters.")
     #     pass
 
-async def cleanup_simulation(self, simulation: Any):
-    """Placeholder for any cleanup needed for a simulation instance."""
-    # OpenMM Simulation objects and Contexts are usually garbage collected.
-    # If specific cleanup (e.g., closing reporter files not handled by __del__) is needed, add here.
-    self.logger.info(f"Cleaning up simulation instance (if necessary).")
-    # For example, if reporters were opened manually and not via context managers:
-    # for reporter in simulation.reporters:
-    #     if hasattr(reporter, '_out') and hasattr(reporter._out, 'close') and not reporter._out.closed:
-    #         reporter._out.close()
-    pass
+    async def cleanup_simulation(self, simulation: Any): # Added self
+        """
+        Performs cleanup for a simulation instance.
+        Based on OpenMM documentation and common usage, standard reporters (DCDReporter,
+        StateDataReporter, CheckpointReporter, etc.) manage their own file handles
+        when initialized with filenames, and these are typically closed upon
+        garbage collection of the reporter or simulation object.
+        Explicitly closing internal file attributes (e.g., `_out`) is not
+        recommended as it's an internal detail and can be fragile.
+        This method is a placeholder if other specific cleanup actions are identified.
+        """
+        if not OPENMM_AVAILABLE:
+            self.logger.debug("OpenMM not available, skipping simulation cleanup logic.")
+            return
+
+        self.logger.info(f"Initiating cleanup for OpenMM Simulation object of type: {type(simulation)}.")
+
+        if hasattr(simulation, 'reporters'):
+            self.logger.debug(f"Simulation has {len(simulation.reporters)} reporters.")
+            # No explicit close needed for standard app.reporters as per research.
+            # If custom reporters with explicit close() methods were used, they could be handled here.
+            # for reporter in simulation.reporters:
+            #     if hasattr(reporter, 'close') and callable(reporter.close):
+            #         try:
+            #             self.logger.debug(f"Calling close() on reporter: {type(reporter)}")
+            #             reporter.close()
+            #         except Exception as e:
+            #             self.logger.error(f"Error closing reporter {type(reporter)}: {e}", exc_info=True)
+            #     elif hasattr(reporter, '_out') and hasattr(reporter._out, 'close') and not reporter._out.closed:
+            #         # This is discouraged as _out is an internal detail.
+            #         try:
+            #             self.logger.debug(f"Closing internal _out for reporter: {type(reporter)}")
+            #             reporter._out.close()
+            #         except Exception as e:
+            #             self.logger.error(f"Error closing internal _out for reporter {type(reporter)}: {e}", exc_info=True)
+
+
+        # The OpenMM Simulation object and its Context are managed by Python's garbage collector.
+        # No explicit del simulation.context or similar is standard practice here.
+        self.logger.info("Simulation cleanup: Standard OpenMM objects are managed by garbage collection. No explicit file closing for standard reporters is performed by this engine.")
+        # If other resources were managed directly by this engine for a simulation, they would be cleaned here.
+        pass
 
 # Example usage (for testing this module directly)
 async def _test_engine():
