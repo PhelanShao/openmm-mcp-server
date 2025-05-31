@@ -1,0 +1,13 @@
+# MCP Server Core Dependencies
+mcp-sdk>=1.0.0 # Provides mcp.server.fastmcp and mcp.types. Please confirm exact package name and version.
+
+# OpenMM for molecular dynamics
+# It's often recommended to install OpenMM via Conda for optimal performance and CUDA support.
+# If installing via pip, ensure all necessary compilers and libraries are present.
+openmm>=7.5.0 # Example version, adjust as needed.
+
+# For loading .env configuration files
+python-dotenv>=0.20.0
+
+# ASGI server for running FastMCP
+uvicorn[standard]>=0.17.0 # [standard] includes common extras like websockets, if needed by FastMCP's SSE.
